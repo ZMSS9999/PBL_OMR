@@ -1,0 +1,9 @@
+fastapi>=0.110
+uvicorn[standard]>=0.29
+reportlab>=4.0
+opencv-contrib-python>=4.8
+numpy
+pypdfium2             # 가상 촬영 테스트(smoke_test, demo)에서 PDF → 이미지 (poppler 불필요)
+pdf2image             # 선택: poppler가 있으면 이쪽을 먼저 사용
+openpyxl>=3.1         # 채점 결과·정답표 엑셀
+python-multipart      # FastAPI 파일 업로드 (답안지 사진, 정답표)

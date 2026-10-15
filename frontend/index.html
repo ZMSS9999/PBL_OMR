@@ -1,0 +1,1081 @@
+<!doctype html>
+<!--
+  CheckMate 관리 화면 (frontend/index.html)
+
+  [역할]
+    - 선생님이 한 화면 안에서 시험 하나를 처음부터 끝까지 처리하는 관리 화면
+      시험 목록 → (1) 답안지 만들기 → (2) 정답 입력 → (3) 사진 올리기 → (4) 검수 → (5) 결과·엑셀
+    - 빌드 도구 없이 HTML + CSS + JS 한 파일로 끝남 (backend/app/main.py 가 "/" 주소에 그대로 내려 줌)
+
+  [화면 구성]
+    aside.side       : 왼쪽 메뉴. 위쪽 '시험 목록', 아래쪽 지금 고른 시험의 단계 1~5 (완료한 단계는 ✓)
+    header.top       : 지금 페이지 제목 + 지금 고른 시험 이름
+    main#view        : 페이지 내용. 주소 끝(#/key 등)을 보고 render 함수 하나가 통째로 그림
+
+  [주소(해시) → 페이지]
+    #/exams     시험 목록 (처음 화면)          #/new      새 시험 만들기 (답안지 PDF)
+    #/overview  시험 현황 (다음 할 일 안내)    #/key      정답 입력
+    #/upload    사진 올리기                    #/review   검수
+    #/results   결과·엑셀
+
+  [부르는 API] (모두 기존 backend/app/main.py 에 있는 것)
+    GET  /api/sheet-options                      입력 범위
+    POST /api/answer-sheets                      답안지 생성
+    GET  /api/answer-sheets/{id}                 시험 정보
+    GET  /api/answer-sheets/{id}/pdf             답안지 PDF
+    GET|PUT /api/exams/{id}/answer-key           정답표 조회·저장
+    GET  /api/exams/{id}/answer-key/template     빈 정답표 엑셀
+    POST /api/exams/{id}/answer-key/upload       정답표 엑셀 올리기
+    POST /api/exams/{id}/sheets                  사진 올리기 → 판독
+    GET  /api/exams/{id}/sheets(/{sid})          판독 목록·한 장 전체
+    PATCH /api/exams/{id}/sheets/{sid}/review    검수 확정
+    GET  /api/exams/{id}/results(.xlsx)          채점 결과·엑셀
+    DELETE /api/exams/{id}                       시험 삭제
+    GET  /api/templates/{tid}/{ver}              양식 좌표 (정답 입력 화면을 답안지와 같은 열 배치로 그릴 때)
+  [있으면 쓰는 API] (예전 백엔드에는 없음 → 없으면 대신 동작하게 만들어 둠)
+    GET  /api/exams                              전체 시험 목록 → 없으면 이 브라우저에서 열어 본 시험만 기억해서 보여 줌
+    GET  /api/exams/{id}/sheets/{sid}/image      정렬된 답안지 사진 → 없으면 검수 화면에서 사진 칸을 숨김
+-->
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CheckMate 관리</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<style>
+  /* 색·간격은 여기 변수에서만 정함 */
+  :root {
+    --bg: #f4f6fa; --card: #fff; --ink: #1b2233; --muted: #6b7385; --line: #e3e7ee; --soft: #f7f9fc;
+    --side: #18233a; --side-ink: #c9d2e3; --side-active: #2b3a5c;
+    --accent: #2f6fed; --accent-soft: #e8f0fe; --accent-ink: #fff;
+    --ok: #1f9d55; --ok-soft: #e5f6ec; --warn: #c27c0e; --warn-soft: #fdf3e1;
+    --bad: #d93a3a; --bad-soft: #fde9e9; --gray-soft: #eef0f4;
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-size: 15px; line-height: 1.5;
+         font-family: "Pretendard", "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif; }
+  a { color: var(--accent); }
+  button { font: inherit; }
+
+  /* 전체 틀: 왼쪽 메뉴 + 오른쪽 본문 */
+  .app { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
+  .side { background: var(--side); color: var(--side-ink); padding: 20px 14px; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+  .brand { display: flex; align-items: center; gap: 10px; color: #fff; font-weight: 700; font-size: 18px; padding: 0 8px 18px; }
+  .brand .logo { width: 30px; height: 30px; border-radius: 8px; background: var(--accent); display: grid; place-items: center; font-size: 16px; }
+  .side h6 { margin: 18px 8px 6px; font-size: 12px; font-weight: 600; color: #8592ab; letter-spacing: .02em; }
+  .nav a { display: flex; align-items: center; gap: 10px; padding: 10px 10px; border-radius: 8px; color: var(--side-ink);
+           text-decoration: none; font-size: 15px; margin-bottom: 2px; }
+  .nav a:hover { background: #223050; color: #fff; }
+  .nav a.active { background: var(--side-active); color: #fff; font-weight: 600; }
+  .nav a.disabled { opacity: .4; pointer-events: none; }
+  .nav .num { width: 24px; height: 24px; border-radius: 50%; border: 1.5px solid #52607c; display: grid; place-items: center;
+              font-size: 12px; font-weight: 700; flex: none; }
+  .nav .num.done { background: var(--ok); border-color: var(--ok); color: #fff; }
+  .nav .badge { margin-left: auto; background: var(--warn); color: #fff; border-radius: 10px; padding: 0 7px; font-size: 12px; font-weight: 700; }
+  .side .cur { margin: 4px 8px 0; padding: 10px 12px; background: #223050; border-radius: 8px; font-size: 13px; }
+  .side .cur b { display: block; color: #fff; font-size: 14px; }
+
+  .mainwrap { min-width: 0; }
+  .top { background: var(--card); border-bottom: 1px solid var(--line); padding: 16px 28px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .top h1 { margin: 0; font-size: 20px; }
+  .top .sub { color: var(--muted); font-size: 14px; }
+  .top .right { margin-left: auto; display: flex; gap: 8px; }
+  #view { padding: 24px 28px 60px; max-width: 1280px; }
+
+  /* 공통 부품 */
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 22px; margin-bottom: 20px; }
+  .card h2 { margin: 0 0 4px; font-size: 17px; }
+  .card .desc { color: var(--muted); font-size: 14px; margin: 0 0 16px; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .grid2 { display: grid; grid-template-columns: 380px 1fr; gap: 20px; align-items: start; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; border-radius: 8px; border: 1px solid var(--line);
+         background: #fff; color: var(--ink); font-size: 14px; font-weight: 500; cursor: pointer; text-decoration: none; white-space: nowrap; }
+  .btn:hover { border-color: #c5ccd8; background: var(--soft); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  .btn.primary:hover { filter: brightness(1.06); }
+  .btn.big { padding: 12px 22px; font-size: 15px; }
+  .btn.block { width: 100%; justify-content: center; }
+  .btn.del { color: var(--bad); } .btn.del:hover { border-color: var(--bad); background: var(--bad-soft); }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .pill { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 13px; font-weight: 600; white-space: nowrap; }
+  .pill.ok { background: var(--ok-soft); color: var(--ok); }
+  .pill.warn { background: var(--warn-soft); color: var(--warn); }
+  .pill.bad { background: var(--bad-soft); color: var(--bad); }
+  .pill.gray { background: var(--gray-soft); color: var(--muted); }
+  .muted { color: var(--muted); }
+  .small { font-size: 13px; }
+  .mono { font-family: ui-monospace, Consolas, monospace; font-size: 13px; }
+  .msg { padding: 12px 14px; border-radius: 8px; font-size: 14px; margin-bottom: 16px; }
+  .msg.err { background: var(--bad-soft); color: var(--bad); }
+  .msg.info { background: var(--accent-soft); color: #1d4fb8; }
+  .msg.ok { background: var(--ok-soft); color: #17703f; }
+  .empty { text-align: center; color: var(--muted); padding: 48px 20px; }
+  .empty b { display: block; color: var(--ink); font-size: 16px; margin-bottom: 6px; }
+
+  /* 표 */
+  table.t { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .t th { text-align: left; font-weight: 600; color: var(--muted); font-size: 13px; padding: 10px 12px; border-bottom: 1px solid var(--line); background: var(--soft); }
+  .t td { padding: 11px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  .t tr.click { cursor: pointer; } .t tr.click:hover td { background: var(--soft); }
+  .t td.num, .t th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .tablewrap { overflow-x: auto; }
+
+  /* 숫자 카드 */
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin-bottom: 20px; }
+  .stat { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; }
+  .stat .k { color: var(--muted); font-size: 13px; }
+  .stat .v { font-size: 26px; font-weight: 700; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .stat .v small { font-size: 14px; color: var(--muted); font-weight: 500; }
+  .stat.warn .v { color: var(--warn); } .stat.bad .v { color: var(--bad); } .stat.ok .v { color: var(--ok); }
+
+  /* 단계 안내 (시험 현황) */
+  .steps { display: grid; gap: 10px; }
+  .step { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+  .step .n { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; background: var(--gray-soft); color: var(--muted); flex: none; }
+  .step.done .n { background: var(--ok); color: #fff; }
+  .step.next { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .step.next .n { background: var(--accent); color: #fff; }
+  .step .what b { display: block; }
+  .step .what span { color: var(--muted); font-size: 13px; }
+  .step .go { margin-left: auto; }
+
+  /* 입력 폼 */
+  .field { margin-bottom: 18px; }
+  .field > label, .field > .label { display: block; font-weight: 600; font-size: 14px; margin-bottom: 7px; }
+  .hint { color: var(--muted); font-size: 12px; font-weight: 400; margin-left: 4px; }
+  input[type=text], input[type=number] { padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; font-family: inherit; background: #fff; }
+  input[type=text] { width: 100%; }
+  input:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+  .qrow { display: flex; align-items: center; gap: 10px; }
+  .qrow input[type=range] { flex: 1; accent-color: var(--accent); }
+  .stepper { display: flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .stepper button { width: 32px; border: 0; background: var(--gray-soft); font-size: 16px; cursor: pointer; }
+  .stepper input { width: 50px; border: 0; border-radius: 0; text-align: center; font-weight: 700; -moz-appearance: textfield; }
+  .stepper input::-webkit-inner-spin-button { -webkit-appearance: none; }
+  .seg { display: flex; gap: 6px; }
+  .seg button { flex: 1; padding: 9px 0; border: 1px solid var(--line); border-radius: 8px; background: #fff; font-size: 14px; cursor: pointer; }
+  .seg button[aria-pressed=true] { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  .summary { background: var(--accent-soft); color: #1d4fb8; border-radius: 8px; padding: 10px 12px; font-size: 13px; margin-bottom: 14px; }
+  iframe.pdf { width: 100%; height: 72vh; border: 1px solid var(--line); border-radius: 8px; background: #fafafa; }
+
+  /* 선지 동그라미 버튼 (정답 입력·검수 공용) */
+  .bubbles { display: flex; gap: 6px; }
+  .bub { width: 34px; height: 34px; border-radius: 50%; border: 1.5px solid #c3cad6; background: #fff; font-weight: 700;
+         font-size: 14px; color: var(--muted); cursor: pointer; display: grid; place-items: center; padding: 0; }
+  .bub:hover { border-color: var(--accent); color: var(--accent); }
+  .bub.on, .btn.nores.on { background: var(--ink); border-color: var(--ink); color: #fff; }
+  .keygrid { display: grid; gap: 0 28px; overflow-x: auto; }
+  .keygrid .keyrow { min-width: 300px; }
+  .keyrow { display: flex; align-items: center; gap: 12px; padding: 8px 4px; border-bottom: 1px solid var(--line); }
+  .keyrow .qn { width: 42px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .keyrow.missing .qn { color: var(--bad); }
+  .keyrow .pts { width: 64px; margin-left: auto; text-align: right; }
+  .savebar { position: sticky; bottom: 0; background: rgba(255,255,255,.96); border-top: 1px solid var(--line);
+             margin: 20px -22px -22px; padding: 14px 22px; display: flex; gap: 10px; align-items: center; border-radius: 0 0 var(--radius) var(--radius); }
+
+  /* 사진 올리기 */
+  .drop { display: block; border: 2px dashed #c3cad6; border-radius: var(--radius); padding: 40px 20px; text-align: center; background: var(--soft); cursor: pointer; }
+  .drop.over { border-color: var(--accent); background: var(--accent-soft); }
+  .drop b { font-size: 16px; display: block; margin-bottom: 4px; }
+  .progress { height: 8px; border-radius: 4px; background: var(--gray-soft); overflow: hidden; margin: 12px 0; }
+  .progress > div { height: 100%; background: var(--accent); width: 0; transition: width .2s; }
+
+  /* 검수 */
+  .review { display: grid; grid-template-columns: 300px 1fr; gap: 20px; align-items: start; }
+  .slist { max-height: 75vh; overflow-y: auto; padding: 0; }
+  .slist .it { padding: 12px 16px; border-bottom: 1px solid var(--line); cursor: pointer; display: flex; gap: 10px; align-items: center; }
+  .slist .it:hover { background: var(--soft); }
+  .slist .it.sel { background: var(--accent-soft); }
+  .slist .it .nm { font-weight: 600; font-size: 14px; }
+  .slist .it .src { color: var(--muted); font-size: 12px; word-break: break-all; }
+  .slist .it .pill { margin-left: auto; }
+  .filters { display: flex; gap: 6px; padding: 12px; border-bottom: 1px solid var(--line); }
+  .filters button { flex: 1; padding: 6px 0; border: 1px solid var(--line); background: #fff; border-radius: 6px; font-size: 13px; cursor: pointer; }
+  .filters button[aria-pressed=true] { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .qcard { display: flex; align-items: center; gap: 14px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line); margin-bottom: 8px; }
+  .qcard.flag { border-color: #f0c674; background: #fffbf2; }
+  .qcard .qn { width: 46px; font-weight: 700; }
+  .qcard .why { font-size: 12px; color: var(--warn); width: 82px; }
+  .fills { display: flex; gap: 6px; }
+  .fill { width: 34px; text-align: center; font-size: 11px; color: var(--muted); }
+  .fill .bar { height: 30px; background: var(--gray-soft); border-radius: 4px; position: relative; overflow: hidden; margin-bottom: 2px; }
+  .fill .bar > i { position: absolute; left: 0; right: 0; bottom: 0; background: #9aa6bb; }
+  .fill .bar > i.hi { background: var(--ink); }
+  .sid { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .sid input { width: 160px; font-size: 16px; font-weight: 700; letter-spacing: .08em; }
+  .photo { width: 100%; border: 1px solid var(--line); border-radius: 8px; }
+
+  /* 결과: 문항별 정답률 막대 */
+  .rate { display: grid; grid-template-columns: 46px 1fr 52px; gap: 10px; align-items: center; font-size: 13px; margin-bottom: 6px; }
+  .rate .track { height: 14px; background: var(--gray-soft); border-radius: 7px; overflow: hidden; }
+  .rate .track > div { height: 100%; background: var(--accent); border-radius: 7px; }
+  .rate .track > div.low { background: var(--bad); }
+  .rates { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 0 28px; }
+
+  .toast { position: fixed; right: 24px; bottom: 24px; background: var(--ink); color: #fff; padding: 12px 18px; border-radius: 10px;
+           font-size: 14px; box-shadow: 0 6px 24px rgba(0,0,0,.18); opacity: 0; transform: translateY(10px); transition: .2s; pointer-events: none; }
+  .toast.show { opacity: 1; transform: none; }
+
+  @media (max-width: 960px) {
+    .app { grid-template-columns: 1fr; }
+    .side { position: static; height: auto; }
+    .grid2, .review { grid-template-columns: 1fr; }
+    #view, .top { padding-left: 16px; padding-right: 16px; }
+    .qcard { flex-wrap: wrap; } .qcard .bubbles { margin-left: 0 !important; flex-wrap: wrap; }
+    .keygrid { grid-template-columns: 1fr !important; } .keygrid > * { grid-row: auto !important; grid-column: auto !important; }
+    .stats { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- 왼쪽 메뉴. 내용은 renderSide() 가 채움 -->
+  <aside class="side" id="side"></aside>
+  <div class="mainwrap">
+    <header class="top">
+      <div><h1 id="title">CheckMate</h1><div class="sub" id="subtitle"></div></div>
+      <div class="right" id="topActions"></div>
+    </header>
+    <main id="view"></main>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+// 백엔드 주소. 같은 서버(uvicorn)에서 열면 빈 문자열 그대로 두면 됨
+const API_BASE = window.CHECKMATE_API || "";
+const $ = (id) => document.getElementById(id);
+const LS_EXAMS = "checkmate.exams";      // 이 브라우저에서 만든·연 시험 ID 목록 (시험 목록 API가 없을 때 대신 씀)
+const LS_CURRENT = "checkmate.current";  // 마지막으로 고른 시험 ID
+
+// app: 지금 화면이 쓰는 값 모음
+//   exam 지금 고른 시험 정보, key 정답표(없으면 null), sheets 판독 목록(null = 아직 안 불러옴)
+const app = { exam: null, key: null, sheets: null, opts: null };
+
+// ---------------- 공통 도구 ----------------
+
+// HTML 특수문자 바꾸기 → 사용자가 쓴 글자가 태그로 실행되지 않게 함
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// 서버 호출. 실패하면 알아듣기 쉬운 문구의 Error 를 던짐 (err.status 에 HTTP 상태 번호)
+async function api(path, opt = {}) {
+  let r;
+  try { r = await fetch(API_BASE + path, opt); }
+  catch (_) { throw Object.assign(new Error("서버에 연결할 수 없습니다. 터미널에서 uvicorn 이 실행 중인지 확인하세요."), { status: 0 }); }
+  const data = await r.json().catch(() => null);
+  if (!r.ok) {
+    const d = data && data.detail;
+    const msg = Array.isArray(d) ? d.map(x => x.msg).join(", ") : (d || `서버 오류 (${r.status})`);
+    throw Object.assign(new Error(msg), { status: r.status });
+  }
+  return data;
+}
+const jsonBody = (method, body) => ({ method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+
+// 화면 오른쪽 아래에 잠깐 뜨는 알림
+function toast(text) {
+  const t = $("toast"); t.textContent = text; t.classList.add("show");
+  clearTimeout(toast.timer); toast.timer = setTimeout(() => t.classList.remove("show"), 2200);
+}
+
+// 이 브라우저에 기억한 시험 ID 목록 읽기·추가 (브라우저 저장소가 막혀 있어도 화면은 동작)
+function rememberedExams() { try { return JSON.parse(localStorage.getItem(LS_EXAMS) || "[]"); } catch (_) { return []; } }
+function remember(examId) {
+  try {
+    const ids = rememberedExams().filter(x => x !== examId); ids.unshift(examId);
+    localStorage.setItem(LS_EXAMS, JSON.stringify(ids.slice(0, 50)));
+    localStorage.setItem(LS_CURRENT, examId);
+  } catch (_) {}
+}
+
+// 답 목록([2, 4] / [] / null) → 화면 글자 ("2, 4" / "무응답" / "?")
+function ansText(a) { return a == null ? "?" : a.length === 0 ? "무응답" : a.join(", "); }
+const oriText = (o) => o === "landscape" ? "가로" : "세로";
+const fmtDate = (s) => s ? s.slice(0, 16).replace("T", " ") : "-";
+const fmtNum = (n) => n == null ? "-" : (Math.round(n * 10) / 10).toString();
+
+// ---------------- 시험 고르기·상태 불러오기 ----------------
+
+// 시험 하나를 '지금 시험'으로 정하고 정답표·판독 목록까지 불러옴
+async function selectExam(examId) {
+  const exam = await api(`/api/answer-sheets/${encodeURIComponent(examId)}`);
+  app.exam = exam; app.key = null; app.sheets = null;
+  remember(exam.exam_id);
+  await refreshExamState();
+}
+// 지금 시험의 정답표·판독 목록 다시 읽기 (각 단계 완료 표시에 씀)
+async function refreshExamState() {
+  if (!app.exam) return;
+  const id = app.exam.exam_id;
+  const [key, sheets] = await Promise.all([
+    api(`/api/exams/${id}/answer-key`).catch(() => null),   // 404 = 아직 정답표 없음
+    api(`/api/exams/${id}/sheets`).catch(() => []),
+  ]);
+  app.key = key; app.sheets = sheets;
+  // 정답표가 있으면 채점 결과로 '검수 대기' 장을 정확히 셈 (예전에 검수한 장은 빠짐)
+  // 없으면 판독 결과의 검수 필요 표시만 봄
+  app.pendingIds = null;
+  if (key && sheets.length) {
+    const res = await api(`/api/exams/${id}/results`).catch(() => null);
+    if (res) { app.pendingIds = new Set(res.filter(r => r.status === "검수 대기").map(r => r.sheet_id)); app.reviewed.clear(); }
+  }
+}
+
+// 단계별 완료 여부 + 검수 대기 장 수 (왼쪽 메뉴·시험 현황에 씀)
+function progress() {
+  const sheets = app.sheets || [];
+  return {
+    sheet: !!app.exam,
+    key: !!app.key,
+    upload: sheets.length > 0,
+    review: sheets.length > 0 && pendingCount() === 0,
+    nReview: pendingCount(),
+    nSheets: sheets.length,
+    nRetake: sheets.filter(s => s.status !== "read").length,
+  };
+}
+// 검수가 필요한 장인지: 채점 결과가 있으면 그 '검수 대기' 여부, 없으면 판독 결과의 검수 필요 표시
+// app.reviewed = 이 화면에서 방금 확인 완료한 장 (다시 불러오기 전까지 바로 빼서 보여 줌)
+app.reviewed = new Set();
+function needsReview(s) {
+  if (s.status !== "read" || app.reviewed.has(s.sheet_id)) return false;
+  return app.pendingIds ? app.pendingIds.has(s.sheet_id) : !!s.needs_review;
+}
+function pendingCount() { return (app.sheets || []).filter(needsReview).length; }
+
+// ---------------- 왼쪽 메뉴 ----------------
+
+const STEPS = [
+  { hash: "#/new", n: 1, label: "답안지 만들기", doneKey: "sheet" },
+  { hash: "#/key", n: 2, label: "정답 입력", doneKey: "key" },
+  { hash: "#/upload", n: 3, label: "사진 올리기", doneKey: "upload" },
+  { hash: "#/review", n: 4, label: "검수", doneKey: "review" },
+  { hash: "#/results", n: 5, label: "결과·엑셀", doneKey: null },
+];
+
+function renderSide() {
+  const h = location.hash || "#/exams";
+  const p = progress();
+  const link = (href, inner, extra = "") => `<a href="${href}" class="${h === href ? "active" : ""} ${extra}">${inner}</a>`;
+  let html = `<div class="brand"><div class="logo">✓</div>CheckMate</div>
+    <nav class="nav">
+      ${link("#/exams", `<span class="num">≡</span>시험 목록`)}
+      ${link("#/new-blank", `<span class="num">+</span>새 시험 만들기`)}
+    </nav>`;
+  if (app.exam) {
+    html += `<h6>지금 시험</h6>
+      <div class="cur"><b>${esc(app.exam.exam_name) || "(시험명 없음)"}</b>${[esc(app.exam.subject), `${app.exam.num_questions}문항`].filter(Boolean).join(" · ")}</div>
+      <nav class="nav" style="margin-top:10px">
+        ${link("#/overview", `<span class="num">◎</span>시험 현황`)}
+        ${STEPS.map(s => {
+          const done = s.doneKey && p[s.doneKey];
+          const badge = s.n === 4 && p.nReview ? `<span class="badge">${p.nReview}</span>` : "";
+          return link(s.hash, `<span class="num ${done ? "done" : ""}">${done ? "✓" : s.n}</span>${s.label}${badge}`);
+        }).join("")}
+      </nav>`;
+  }
+  $("side").innerHTML = html;
+}
+
+// 맨 위 제목줄
+function setTop(title, sub = "", actions = "") {
+  $("title").textContent = title;
+  $("subtitle").innerHTML = sub;
+  $("topActions").innerHTML = actions;
+  document.title = `${title} · CheckMate`;
+}
+
+// ---------------- 주소 → 페이지 ----------------
+
+const PAGES = {
+  "#/exams": pageExams, "#/new": pageNew, "#/new-blank": pageNew, "#/overview": pageOverview,
+  "#/key": pageKey, "#/upload": pageUpload, "#/review": pageReview, "#/results": pageResults,
+};
+// 시험을 골라야 열 수 있는 페이지 (#/new 는 시험이 있으면 그 답안지를 보여 주고, 없으면 새로 만듦)
+const NEED_EXAM = ["#/overview", "#/key", "#/upload", "#/review", "#/results"];
+
+async function route() {
+  let h = location.hash || "#/exams";
+  if (!PAGES[h]) h = "#/exams";
+  if (NEED_EXAM.includes(h) && !app.exam) { location.hash = "#/exams"; return; }
+  renderSide();
+  $("view").innerHTML = `<div class="empty">불러오는 중…</div>`;
+  try { await PAGES[h](); }
+  catch (e) { $("view").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
+  renderSide();
+  window.scrollTo(0, 0);
+}
+window.addEventListener("hashchange", route);
+
+// ---------------- 시험 목록 ----------------
+
+async function pageExams() {
+  setTop("시험 목록", "시험을 고르면 정답 입력·사진 올리기·결과 확인을 이어서 할 수 있습니다.",
+    `<a class="btn primary" href="#/new-blank">+ 새 시험 만들기</a>`);
+  // 1순위: 서버의 전체 시험 목록 (GET /api/exams). 아직 없으면 이 브라우저가 기억한 시험만 하나씩 읽어 옴
+  let exams, fromServer = true;
+  try { exams = await api("/api/exams"); if (!Array.isArray(exams)) throw new Error(); }
+  catch (_) {
+    fromServer = false;
+    const got = await Promise.all(rememberedExams().map(id => api(`/api/answer-sheets/${id}`).catch(() => null)));
+    exams = got.filter(Boolean);
+  }
+  exams.sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
+
+  const rows = exams.map(e => `
+    <tr class="click" data-id="${esc(e.exam_id)}">
+      <td><b>${esc(e.exam_name) || "(시험명 없음)"}</b><div class="muted small">${esc(e.subject) || ""}</div></td>
+      <td>${e.num_questions}문항 · ${e.num_choices}지선다</td>
+      <td>${oriText(e.orientation)}</td>
+      <td>${fmtDate(e.created_at)}</td>
+      <td class="mono">${esc(e.exam_id)}</td>
+      <td style="text-align:right;white-space:nowrap"><button class="btn">열기</button>
+        <button class="btn del" data-del="${esc(e.exam_id)}" data-name="${esc(e.exam_name)}" title="시험 삭제">삭제</button></td>
+    </tr>`).join("");
+
+  $("view").innerHTML = `
+    <div class="card">
+      ${exams.length ? `<div class="tablewrap"><table class="t">
+        <thead><tr><th>시험</th><th>문항</th><th>방향</th><th>만든 날짜</th><th>시험 ID</th><th></th></tr></thead>
+        <tbody>${rows}</tbody></table></div>`
+      : `<div class="empty"><b>아직 시험이 없습니다</b>왼쪽 위 ‘새 시험 만들기’로 답안지를 만들거나, 아래에 시험 ID를 넣어 예전 시험을 불러오세요.</div>`}
+    </div>
+    <div class="card">
+      <h2>시험 ID로 불러오기</h2>
+      <p class="desc">${fromServer ? "목록에 없는 시험은" : "이 브라우저에서 처음 여는 시험은"} 시험 ID(예: EX-20261014-DE1319)를 넣어 불러올 수 있습니다.
+        시험 ID는 backend/storage/exams 폴더 이름과 같습니다.</p>
+      <form class="row" id="loadForm">
+        <input type="text" id="loadId" placeholder="EX-20261014-XXXXXX" style="max-width:280px">
+        <button class="btn primary" type="submit">불러오기</button>
+      </form>
+      <div class="msg err" id="loadErr" style="display:none;margin-top:12px"></div>
+    </div>`;
+
+  for (const tr of document.querySelectorAll("tr[data-id]"))
+    tr.onclick = async (ev) => {
+      const del = ev.target.closest("[data-del]");
+      if (del) { await deleteExam(del.dataset.del, del.dataset.name); return; }
+      await selectExam(tr.dataset.id); location.hash = "#/overview";
+    };
+  $("loadForm").onsubmit = async (e) => {
+    e.preventDefault();
+    const id = $("loadId").value.trim().toUpperCase();
+    if (!id) return;
+    try { await selectExam(id); location.hash = "#/overview"; }
+    catch (err) { $("loadErr").style.display = ""; $("loadErr").textContent = err.status === 404 ? "그 ID의 시험이 없습니다." : err.message; }
+  };
+}
+
+// 시험 삭제: 확인 창 → DELETE /api/exams/{id} → 기억한 목록에서도 빼고 시험 목록으로
+//   되돌릴 수 없어서 확인 창에 무엇이 지워지는지 적어 둠
+async function deleteExam(examId, name) {
+  const label = name ? `‘${name}’ (${examId})` : examId;
+  if (!confirm(`${label} 시험을 삭제할까요?\n\n답안지 PDF, 정답표, 올린 사진, 검수 내용, 채점 결과가 모두 지워지고 되돌릴 수 없습니다.`)) return;
+  try { await api(`/api/exams/${encodeURIComponent(examId)}`, { method: "DELETE" }); }
+  catch (ex) {
+    // 404 = 이미 없는 시험 → 목록에서만 빼면 됨
+    if (ex.status !== 404) { alert(ex.status === 405 ? "백엔드가 아직 삭제 기능이 없는 예전 버전입니다. uvicorn 을 다시 켜 주세요." : ex.message); return; }
+  }
+  try {
+    localStorage.setItem(LS_EXAMS, JSON.stringify(rememberedExams().filter(x => x !== examId)));
+    if (localStorage.getItem(LS_CURRENT) === examId) localStorage.removeItem(LS_CURRENT);
+  } catch (_) {}
+  if (app.exam && app.exam.exam_id === examId) { app.exam = null; app.key = null; app.sheets = null; }
+  toast("시험을 삭제했습니다");
+  if (location.hash === "#/exams") route(); else location.hash = "#/exams";
+}
+
+// ---------------- 1. 답안지 만들기 ----------------
+
+async function pageNew() {
+  // #/new-blank 로 오면 '지금 시험'을 비우고 새로 만들기. #/new 는 지금 시험이 있으면 그 답안지를 보여 줌
+  if (location.hash === "#/new-blank") { app.exam = null; app.key = null; app.sheets = null; renderSide(); }
+  if (app.exam) return showSheet();
+
+  setTop("새 시험 만들기", "문항 수와 선지 수를 고르면 인쇄용 A4 답안지 PDF를 만듭니다.");
+  if (!app.opts) {
+    app.opts = await api("/api/sheet-options").catch(() => ({
+      num_questions: { min: 5, max: 45, default: 20 }, num_choices: { min: 2, max: 5, default: 5 },
+      orientations: [{ value: "portrait", label: "세로" }, { value: "landscape", label: "가로" }], short_answers: 5,
+    }));
+  }
+  const o = app.opts;
+  const st = { num_questions: o.num_questions.default ?? 20, num_choices: o.num_choices.default ?? 5, orientation: "portrait" };
+
+  $("view").innerHTML = `
+    <div class="grid2">
+      <form class="card" id="form" novalidate>
+        <div class="field"><label for="exam_name">시험명 <span class="hint">선택 · QR코드에만 저장</span></label>
+          <input type="text" id="exam_name" maxlength="30" placeholder="예) 2026학년도 2학기 중간고사"></div>
+        <div class="field"><label for="subject">과목명 <span class="hint">선택 · QR코드에만 저장</span></label>
+          <input type="text" id="subject" maxlength="20" placeholder="예) 컴퓨터비전"></div>
+        <div class="field"><span class="label">객관식 문항 수 <span class="hint">${o.num_questions.min}~${o.num_questions.max}</span></span>
+          <div class="qrow">
+            <input type="range" id="q_range" min="${o.num_questions.min}" max="${o.num_questions.max}" step="1" aria-label="문항 수 슬라이더">
+            <div class="stepper"><button type="button" id="q_dec" aria-label="줄이기">−</button>
+              <input type="number" id="q_num" min="${o.num_questions.min}" max="${o.num_questions.max}" aria-label="문항 수">
+              <button type="button" id="q_inc" aria-label="늘리기">+</button></div>
+          </div></div>
+        <div class="field"><span class="label">선지 수</span><div class="seg" id="choices"></div></div>
+        <div class="field"><span class="label">답안지 방향</span><div class="seg" id="ori"></div></div>
+        <div class="summary" id="summary"></div>
+        <button class="btn primary big block" id="submit" type="submit">답안지 PDF 만들기</button>
+        <div class="msg err" id="err" style="display:none;margin:12px 0 0"></div>
+      </form>
+      <section class="card"><div class="empty"><b>미리보기</b>왼쪽에서 값을 고르고 ‘답안지 PDF 만들기’를 누르면 여기에 답안지가 나옵니다.</div></section>
+    </div>`;
+
+  const seg = (el, items, k) => {
+    el.innerHTML = "";
+    for (const it of items) {
+      const b = document.createElement("button"); b.type = "button"; b.textContent = it.label;
+      b.setAttribute("aria-pressed", String(st[k] === it.value));
+      b.onclick = () => { st[k] = it.value; draw(); };
+      el.appendChild(b);
+    }
+  };
+  const clamp = (v) => { const n = Math.round(Number(v)); return Number.isFinite(n) ? Math.min(o.num_questions.max, Math.max(o.num_questions.min, n)) : st.num_questions; };
+  const setQ = (v) => { st.num_questions = clamp(v); draw(); };
+  function draw() {
+    $("q_range").value = $("q_num").value = st.num_questions;
+    const ch = []; for (let k = o.num_choices.min; k <= o.num_choices.max; k++) ch.push({ value: k, label: `${k}지선다` });
+    seg($("choices"), ch, "num_choices");
+    seg($("ori"), o.orientations, "orientation");
+    $("summary").textContent = `${oriText(st.orientation)} A4 · 객관식 ${st.num_questions}문항(${st.num_choices}지선다) · 주관식 ${o.short_answers}문항 · 학번 10자리`;
+  }
+  $("q_range").oninput = (e) => setQ(e.target.value);
+  $("q_num").onchange = (e) => setQ(e.target.value);
+  $("q_dec").onclick = () => setQ(st.num_questions - 1);
+  $("q_inc").onclick = () => setQ(st.num_questions + 1);
+  draw();
+
+  $("form").onsubmit = async (e) => {
+    e.preventDefault();
+    const exam_name = $("exam_name").value.trim(), subject = $("subject").value.trim();
+    const err = $("err"); err.style.display = "none";
+    if ((exam_name + subject).includes("|")) { err.style.display = ""; err.textContent = "시험명·과목명에는 | 문자를 쓸 수 없습니다."; return; }
+    $("submit").disabled = true; $("submit").textContent = "만드는 중…";
+    try {
+      const rec = await api("/api/answer-sheets", jsonBody("POST", { ...st, exam_name, subject }));
+      app.exam = rec; app.key = null; app.sheets = [];
+      remember(rec.exam_id);
+      toast("답안지를 만들었습니다");
+      location.hash = "#/new";
+    } catch (ex) {
+      err.style.display = ""; err.textContent = ex.message;
+      $("submit").disabled = false; $("submit").textContent = "답안지 PDF 만들기";
+    }
+  };
+}
+
+// 이미 만든 시험의 답안지 PDF 보기
+function showSheet() {
+  const e = app.exam, pdf = `${API_BASE}${e.pdf_url}`;
+  setTop("1. 답안지", `${esc(e.exam_name) || "(시험명 없음)"} · 인쇄해서 학생들에게 나눠 주세요.`,
+    `<a class="btn" href="${pdf}?download=true">PDF 내려받기</a><a class="btn primary" href="#/key">다음: 정답 입력 →</a>`);
+  $("view").innerHTML = `
+    <div class="grid2">
+      <div class="card">
+        <h2>시험 정보</h2>
+        <table class="t" style="margin-top:10px"><tbody>
+          <tr><td class="muted">시험명</td><td>${esc(e.exam_name) || "-"}</td></tr>
+          <tr><td class="muted">과목명</td><td>${esc(e.subject) || "-"}</td></tr>
+          <tr><td class="muted">문항</td><td>객관식 ${e.num_questions}문항 · ${e.num_choices}지선다</td></tr>
+          <tr><td class="muted">방향</td><td>${oriText(e.orientation)}</td></tr>
+          <tr><td class="muted">시험 ID</td><td class="mono">${esc(e.exam_id)}</td></tr>
+          <tr><td class="muted">양식</td><td class="mono">${esc(e.template_id)} v${esc(e.template_version)}</td></tr>
+        </tbody></table>
+        <p class="muted small" style="margin:14px 0 0">시험명·과목명은 답안지에 인쇄되지 않고 QR코드에만 들어갑니다.
+          다른 시험 답안지 사진을 잘못 올리면 이 QR코드로 걸러 냅니다.</p>
+      </div>
+      <div class="card"><iframe class="pdf" src="${pdf}" title="답안지 미리보기"></iframe></div>
+    </div>`;
+}
+
+// ---------------- 시험 현황 ----------------
+
+async function pageOverview() {
+  await refreshExamState();
+  const e = app.exam, p = progress();
+  setTop(e.exam_name || "(시험명 없음)", `${e.subject ? esc(e.subject) + " · " : ""}객관식 ${e.num_questions}문항 · ${e.num_choices}지선다 · <span class="mono">${esc(e.exam_id)}</span>`);
+
+  const steps = [
+    { n: 1, done: true, hash: "#/new", t: "답안지 만들기", d: "답안지 PDF를 인쇄해서 나눠 줍니다." },
+    { n: 2, done: p.key, hash: "#/key", t: "정답 입력", d: p.key ? "정답표가 저장되어 있습니다." : "문항별 정답과 배점을 넣습니다." },
+    { n: 3, done: p.upload, hash: "#/upload", t: "사진 올리기", d: p.upload ? `${p.nSheets}장 올렸습니다.` : "학생 답안지를 찍은 사진을 올립니다." },
+    { n: 4, done: p.review, hash: "#/review", t: "검수", d: !p.upload ? "사진을 올리면 기계가 헷갈린 칸만 골라 보여 줍니다." : p.nReview ? `확인이 필요한 답안지 ${p.nReview}장` : "확인할 답안지가 없습니다." },
+    { n: 5, done: false, hash: "#/results", t: "결과·엑셀", d: "점수표를 보고 엑셀로 내려받습니다." },
+  ];
+  // 다음 할 일 = 아직 안 끝난 첫 단계
+  const next = steps.find(s => !s.done);
+
+  $("view").innerHTML = `
+    <div class="stats">
+      <div class="stat"><div class="k">올린 답안지</div><div class="v">${p.nSheets}<small> 장</small></div></div>
+      <div class="stat ${p.nReview ? "warn" : ""}"><div class="k">검수 대기</div><div class="v">${p.nReview}<small> 장</small></div></div>
+      <div class="stat ${p.nRetake ? "bad" : ""}"><div class="k">재촬영 필요</div><div class="v">${p.nRetake}<small> 장</small></div></div>
+      <div class="stat ${p.key ? "ok" : ""}"><div class="k">정답표</div><div class="v" style="font-size:20px;margin-top:6px">${p.key ? "입력함" : "아직 없음"}</div></div>
+    </div>
+    <div class="card">
+      <h2>진행 순서</h2>
+      <p class="desc">파란 테두리가 다음에 할 일입니다. 어느 단계든 눌러서 다시 볼 수 있습니다.</p>
+      <div class="steps">
+        ${steps.map(s => `
+          <div class="step ${s.done ? "done" : ""} ${s === next ? "next" : ""}">
+            <div class="n">${s.done ? "✓" : s.n}</div>
+            <div class="what"><b>${s.t}</b><span>${s.d}</span></div>
+            <a class="btn ${s === next ? "primary" : ""} go" href="${s.hash}">${s === next ? "시작하기" : "열기"}</a>
+          </div>`).join("")}
+      </div>
+    </div>
+    <div class="card row">
+      <div><h2>시험 삭제</h2><p class="desc" style="margin:0">이 시험의 답안지·정답표·사진·결과를 모두 지웁니다. 되돌릴 수 없습니다.</p></div>
+      <button class="btn del" id="delExam" style="margin-left:auto">시험 삭제</button>
+    </div>`;
+  $("delExam").onclick = () => deleteExam(e.exam_id, e.exam_name);
+}
+
+// ---------------- 2. 정답 입력 ----------------
+
+async function pageKey() {
+  const e = app.exam, N = e.num_questions, C = e.num_choices;
+  app.key = await api(`/api/exams/${e.exam_id}/answer-key`).catch(() => null);
+  // 답안지와 같은 배치로 보여 주기: 양식 좌표의 문항별 열·행(column, row)을 그대로 씀
+  //   예) 30문항 = 2열 → 첫 줄이 1번, 16번 (한 열 15문항). 양식을 못 읽으면 한 열 15문항으로 계산
+  const lay = await api(e.template_url).catch(() => null);
+  const pos = {};
+  for (const m of lay?.mcq?.questions || []) pos[m.q] = { col: m.column, row: m.row };
+  const perCol = lay?.mcq?.rows_per_column || 15;
+  for (let q = 1; q <= N; q++) if (!pos[q]) pos[q] = { col: Math.floor((q - 1) / perCol), row: (q - 1) % perCol };
+  const nCols = Math.max(...Object.values(pos).map(p => p.col)) + 1;
+  setTop("2. 정답 입력", "답안지와 같은 배치입니다. 문항마다 정답 번호를 누르세요. 정답이 여러 개면 여러 개를 누르면 됩니다.",
+    `<a class="btn" href="${API_BASE}/api/exams/${e.exam_id}/answer-key/template">엑셀 양식 내려받기</a>
+     <label class="btn" for="keyFile" style="cursor:pointer">엑셀로 올리기</label>`);
+
+  // ans[q] = 정답 목록, pts[q] = 배점 (빈칸 = 기본 배점)
+  const ans = {}, pts = {};
+  let defPts = 1;
+  if (app.key) {
+    for (const [q, a] of Object.entries(app.key.answers || {})) ans[q] = [...a];
+    // 저장된 배점이 기본 배점과 다를 때만 칸에 표시
+    defPts = app.key.default_points ?? 1;
+    for (const [q, v] of Object.entries(app.key.points || {})) if (v !== defPts) pts[q] = v;
+  }
+
+  $("view").innerHTML = `
+    <div class="card">
+      <div class="row" style="margin-bottom:6px">
+        <h2 style="margin:0">정답표</h2>
+        <span class="pill gray" id="cnt"></span>
+        <span style="margin-left:auto" class="row small">기본 배점
+          <input type="number" id="defPts" min="0" step="0.5" value="${defPts}" style="width:72px">점
+          <span class="muted">· 배점이 다른 문항만 오른쪽 칸에 적으세요</span></span>
+      </div>
+      ${app.key ? `<div class="msg ok" style="margin-top:12px">저장된 정답표를 불러왔습니다. 고친 뒤 저장하면 새 값으로 바뀝니다.</div>` : ""}
+      <input type="file" id="keyFile" accept=".xlsx,.json" hidden>
+      <div class="keygrid" id="keygrid"></div>
+      <div class="savebar">
+        <div class="msg err" id="keyErr" style="display:none;margin:0"></div>
+        <button class="btn primary big" id="saveKey" style="margin-left:auto">정답표 저장</button>
+      </div>
+    </div>`;
+
+  function draw() {
+    let html = "";
+    for (let q = 1; q <= N; q++) {
+      const a = ans[q] || [];
+      html += `<div class="keyrow ${a.length ? "" : "missing"}" style="grid-column:${pos[q].col + 1};grid-row:${pos[q].row + 1}">
+        <span class="qn">${q}번</span>
+        <div class="bubbles">${Array.from({ length: C }, (_, i) =>
+          `<button type="button" class="bub ${a.includes(i + 1) ? "on" : ""}" data-q="${q}" data-c="${i + 1}">${i + 1}</button>`).join("")}</div>
+        <input type="number" class="pts" min="0" step="0.5" data-q="${q}" value="${pts[q] ?? ""}" placeholder="${$("defPts").value}" aria-label="${q}번 배점">
+      </div>`;
+    }
+    $("keygrid").innerHTML = html;
+    $("keygrid").style.gridTemplateColumns = `repeat(${nCols}, minmax(300px, 1fr))`;
+    const filled = Object.values(ans).filter(a => a.length).length;
+    $("cnt").textContent = `${filled} / ${N} 문항 입력`;
+    $("cnt").className = `pill ${filled === N ? "ok" : "gray"}`;
+  }
+  draw();
+
+  $("keygrid").onclick = (ev) => {
+    const b = ev.target.closest(".bub"); if (!b) return;
+    const q = b.dataset.q, c = Number(b.dataset.c);
+    const a = ans[q] || [];
+    ans[q] = a.includes(c) ? a.filter(x => x !== c) : [...a, c].sort();
+    draw();
+  };
+  $("keygrid").onchange = (ev) => {
+    const i = ev.target.closest("input.pts"); if (!i) return;
+    if (i.value === "") delete pts[i.dataset.q]; else pts[i.dataset.q] = Number(i.value);
+  };
+  $("defPts").onchange = draw;
+
+  $("saveKey").onclick = async () => {
+    const err = $("keyErr"); err.style.display = "none";
+    const missing = []; for (let q = 1; q <= N; q++) if (!(ans[q] || []).length) missing.push(q);
+    if (missing.length) { err.style.display = ""; err.textContent = `정답이 비어 있는 문항: ${missing.join(", ")}번`; return; }
+    const answers = {}; for (let q = 1; q <= N; q++) answers[q] = ans[q];
+    try {
+      app.key = await api(`/api/exams/${e.exam_id}/answer-key`,
+        jsonBody("PUT", { answers, points: pts, default_points: Number($("defPts").value || 1) }));
+      toast("정답표를 저장했습니다");
+      renderSide();
+      location.hash = "#/upload";
+    } catch (ex) { err.style.display = ""; err.textContent = ex.message; }
+  };
+
+  $("keyFile").onchange = async (ev) => {
+    const f = ev.target.files[0]; if (!f) return;
+    const fd = new FormData(); fd.append("file", f);
+    try {
+      app.key = await api(`/api/exams/${e.exam_id}/answer-key/upload`, { method: "POST", body: fd });
+      toast("엑셀 정답표를 불러와 저장했습니다");
+      route();
+    } catch (ex) { const err = $("keyErr"); err.style.display = ""; err.textContent = ex.message; }
+  };
+}
+
+// ---------------- 3. 사진 올리기 ----------------
+
+const STATUS_TEXT = {
+  read: ["ok", "판독 완료"], align_failed: ["bad", "재촬영 필요"], wrong_exam: ["bad", "다른 시험지"], rejected: ["bad", "올릴 수 없는 파일"],
+};
+function sheetPill(s) {
+  if (needsReview(s)) return `<span class="pill warn">검수 필요</span>`;
+  const [cls, t] = STATUS_TEXT[s.status] || ["gray", s.status];
+  return `<span class="pill ${cls}">${t}</span>`;
+}
+
+async function pageUpload() {
+  const e = app.exam;
+  await refreshExamState();
+  setTop("3. 사진 올리기", "학생 답안지를 찍은 사진(jpg, png)을 한 번에 여러 장 올릴 수 있습니다.",
+    app.sheets.length ? `<a class="btn primary" href="#/review">다음: 검수 →</a>` : "");
+
+  $("view").innerHTML = `
+    <div class="card">
+      <label class="drop" id="drop" for="photos">
+        <b>여기로 사진을 끌어 놓거나 눌러서 고르세요</b>
+        <span class="muted small">네 모서리 표시(검은 네모)와 QR코드가 모두 보이게 찍어 주세요 · 한 장 20MB까지</span>
+      </label>
+      <input type="file" id="photos" accept="image/*" multiple hidden>
+      <div id="upState"></div>
+    </div>
+    <div class="card">
+      <div class="row" style="margin-bottom:12px"><h2 style="margin:0">올린 답안지</h2><span class="pill gray" id="nSheets"></span></div>
+      <div id="sheetTable"></div>
+    </div>`;
+
+  drawSheetTable();
+
+  const drop = $("drop");
+  drop.ondragover = (ev) => { ev.preventDefault(); drop.classList.add("over"); };
+  drop.ondragleave = () => drop.classList.remove("over");
+  drop.ondrop = (ev) => { ev.preventDefault(); drop.classList.remove("over"); upload([...ev.dataTransfer.files]); };
+  $("photos").onchange = (ev) => upload([...ev.target.files]);
+
+  // 5장씩 나눠 보내서 진행 막대를 보여 줌 (서버는 한 장씩 판독함)
+  async function upload(files) {
+    files = files.filter(f => f.type.startsWith("image/") || /\.(jpe?g|png|bmp|webp)$/i.test(f.name));
+    if (!files.length) return;
+    const box = $("upState");
+    box.innerHTML = `<div class="progress"><div id="bar"></div></div><div class="small muted" id="upText"></div>`;
+    const results = [];
+    for (let i = 0; i < files.length; i += 5) {
+      $("upText").textContent = `${i} / ${files.length}장 판독 중…`;
+      const fd = new FormData(); for (const f of files.slice(i, i + 5)) fd.append("files", f);
+      try { results.push(...(await api(`/api/exams/${e.exam_id}/sheets`, { method: "POST", body: fd })).sheets); }
+      catch (ex) { box.innerHTML = `<div class="msg err" style="margin-top:12px">${esc(ex.message)}</div>`; return; }
+      $("bar").style.width = `${Math.min(100, ((i + 5) / files.length) * 100)}%`;
+    }
+    await refreshExamState();
+    const bad = results.filter(r => r.status !== "read");
+    const rev = results.filter(r => r.status === "read" && r.needs_review).length;
+    box.innerHTML = `<div class="msg ${bad.length ? "err" : "ok"}" style="margin-top:14px">
+      ${results.length}장 중 ${results.length - bad.length}장 판독 완료${rev ? `, 그중 ${rev}장은 검수가 필요합니다` : ""}.
+      ${bad.length ? `<br>판독하지 못한 사진: ${bad.map(b => `${esc(b.source)} (${esc(b.error || STATUS_TEXT[b.status]?.[1])})`).join(", ")}` : ""}</div>`;
+    $("photos").value = "";
+    drawSheetTable(); renderSide();
+    setTop("3. 사진 올리기", "학생 답안지를 찍은 사진(jpg, png)을 한 번에 여러 장 올릴 수 있습니다.",
+      `<a class="btn primary" href="#/review">다음: 검수 →</a>`);
+  }
+}
+function drawSheetTable() {
+  const list = [...(app.sheets || [])].reverse();   // 최근에 올린 것부터
+  $("nSheets").textContent = `${list.length}장`;
+  $("sheetTable").innerHTML = list.length ? `<div class="tablewrap"><table class="t">
+    <thead><tr><th>사진 파일</th><th>학번</th><th>상태</th><th>올린 시각</th><th></th></tr></thead>
+    <tbody>${list.map(s => `<tr>
+      <td>${esc(s.source)}</td>
+      <td class="mono">${esc(s.student_id || s.student_id_raw || "-")}</td>
+      <td>${sheetPill(s)}${s.error ? `<div class="small muted">${esc(s.error)}</div>` : ""}</td>
+      <td>${fmtDate(s.processed_at)}</td>
+      <td style="text-align:right">${s.status === "read" ? `<a class="btn" href="#/review" data-sid="${s.sheet_id}">보기</a>` : ""}</td>
+    </tr>`).join("")}</tbody></table></div>`
+    : `<div class="empty"><b>아직 올린 사진이 없습니다</b>위 칸에 사진을 올리면 바로 판독합니다.</div>`;
+  for (const a of document.querySelectorAll("a[data-sid]")) a.onclick = () => { app.reviewSel = a.dataset.sid; };
+}
+
+// ---------------- 4. 검수 ----------------
+
+const READ_WHY = { ambiguous: "흐린 표시", multi: "여러 개 표시", blank: "", ok: "" };
+
+async function pageReview() {
+  const e = app.exam;
+  await refreshExamState();
+  setTop("4. 검수", "기계가 확실히 읽지 못한 칸만 노란색으로 표시했습니다. 사진(또는 칠한 정도)을 보고 맞는 답을 고른 뒤 ‘확인 완료’를 누르세요.",
+    `<a class="btn primary" href="#/results">다음: 결과 보기 →</a>`);
+
+  const readSheets = app.sheets.filter(s => s.status === "read");
+  if (!app.sheets.length) {
+    $("view").innerHTML = `<div class="card"><div class="empty"><b>아직 올린 사진이 없습니다</b><a href="#/upload">사진 올리기</a>부터 해 주세요.</div></div>`;
+    return;
+  }
+  // 목록 필터: need(검수 필요) / all(전체) / bad(재촬영)
+  let filter = pendingCount() ? "need" : "all";
+  let sel = app.reviewSel || null;
+
+  $("view").innerHTML = `
+    <div class="review">
+      <div class="card slist" style="padding:0">
+        <div class="filters" id="filters"></div>
+        <div id="slist"></div>
+      </div>
+      <div id="detail"></div>
+    </div>`;
+
+  function listItems() {
+    if (filter === "need") return app.sheets.filter(needsReview);
+    if (filter === "bad") return app.sheets.filter(s => s.status !== "read");
+    return app.sheets;
+  }
+  function drawList() {
+    const nBad = app.sheets.length - readSheets.length;
+    $("filters").innerHTML = [["need", `검수 필요 ${pendingCount()}`], ["all", `전체 ${app.sheets.length}`], ["bad", `재촬영 ${nBad}`]]
+      .map(([k, t]) => `<button aria-pressed="${filter === k}" data-f="${k}">${t}</button>`).join("");
+    const items = listItems();
+    $("slist").innerHTML = items.length ? items.map(s => `
+      <div class="it ${s.sheet_id === sel ? "sel" : ""}" data-sid="${s.sheet_id || ""}">
+        <div><div class="nm">${esc(s.student_id || s.student_id_raw || "학번 미확인")}</div><div class="src">${esc(s.source)}</div></div>
+        ${sheetPill(s)}
+      </div>`).join("")
+      : `<div class="empty small">${filter === "need" ? "검수할 답안지가 없습니다 🎉" : "해당하는 답안지가 없습니다"}</div>`;
+  }
+  $("filters").onclick = (ev) => { const b = ev.target.closest("button"); if (!b) return; filter = b.dataset.f; drawList(); };
+  $("slist").onclick = (ev) => {
+    const it = ev.target.closest(".it"); if (!it || !it.dataset.sid) return;
+    sel = it.dataset.sid; drawList(); openSheet(sel);
+  };
+
+  drawList();
+  if (!sel || !app.sheets.some(s => s.sheet_id === sel)) sel = listItems()[0]?.sheet_id;
+  if (sel) { drawList(); openSheet(sel); }
+  else $("detail").innerHTML = `<div class="card"><div class="empty"><b>왼쪽에서 답안지를 고르세요</b></div></div>`;
+
+  // 답안지 한 장 열기: 판독 원본 + 지금까지의 검수 값을 합쳐서 문항별로 보여 줌
+  async function openSheet(sid) {
+    app.reviewSel = sid;
+    const box = $("detail");
+    box.innerHTML = `<div class="card"><div class="empty">불러오는 중…</div></div>`;
+    const rec = await api(`/api/exams/${e.exam_id}/sheets/${sid}`);
+    if (rec.status !== "read") {
+      box.innerHTML = `<div class="card"><h2>${esc(rec.source)}</h2><div class="msg err" style="margin-top:12px">${esc(rec.error || "판독하지 못했습니다")}</div>
+        <p class="muted">네 모서리 표시가 모두 보이게 다시 찍어서 <a href="#/upload">사진 올리기</a>에서 올려 주세요.</p></div>`;
+      return;
+    }
+    const read = rec.read, corr = (rec.review && rec.review.corrections) || {};
+    const C = e.num_choices;
+    // cur[q] = 지금 화면에서 고른 답. 검수한 값이 있으면 그것, 없으면 판독한 답
+    const cur = {};
+    for (const m of read.mcq) cur[m.q] = corr[m.q] != null ? [...corr[m.q]] : (m.answer ? [...m.answer] : []);
+    const flagged = read.mcq.filter(m => m.needs_review);
+    // decided = 사람이 답을 고른 확인 대상 문항 (예전에 검수한 문항은 이미 고른 것으로 봄)
+    // 확인 대상 문항을 하나도 안 건드리고 저장하면 전부 무응답으로 확정되는 실수를 막으려고 씀
+    const decided = new Set(flagged.filter(m => corr[m.q] != null).map(m => m.q));
+    const keyAns = app.key ? app.key.answers : null;
+    let showAll = flagged.length === 0;
+    const sidRead = read.student_id;
+    const sidNow = (rec.review && rec.review.student_id) || sidRead.text || "";
+
+    box.innerHTML = `
+      <div class="card">
+        <div class="row" style="margin-bottom:14px">
+          <h2 style="margin:0">${esc(rec.source)}</h2>
+          ${flagged.length ? `<span class="pill warn">확인할 문항 ${flagged.length}개</span>` : `<span class="pill ok">모든 문항 판독됨</span>`}
+          ${rec.review && rec.review.updated_at ? `<span class="pill gray">검수함 ${fmtDate(rec.review.updated_at)}</span>` : ""}
+        </div>
+        <div class="field sid">
+          <span class="label" style="margin:0">학번</span>
+          <input type="text" id="sidInput" inputmode="numeric" maxlength="10" value="${esc(sidNow)}" placeholder="${esc(sidRead.raw)}">
+          ${sidRead.needs_review ? `<span class="pill warn">학번을 확인하세요 (읽은 값: ${esc(sidRead.raw)})</span>` : `<span class="muted small">읽은 값: ${esc(sidRead.raw)}</span>`}
+        </div>
+        <div id="photoBox"></div>
+        <div class="row" style="margin:6px 0 10px">
+          <span class="small muted">막대 = 칸을 칠한 정도 (진할수록 많이 칠함) · 동그라미를 눌러 답을 고르세요 · 아무것도 안 고르면 무응답</span>
+          <label class="small" style="margin-left:auto"><input type="checkbox" id="showAll" ${showAll ? "checked" : ""}> 모든 문항 보기</label>
+        </div>
+        <div id="qlist"></div>
+        <div class="savebar">
+          <div class="msg err" id="revErr" style="display:none;margin:0"></div>
+          <button class="btn" id="skip" style="margin-left:auto">다음 답안지</button>
+          <button class="btn primary big" id="saveRev">확인 완료</button>
+        </div>
+      </div>`;
+
+    // 정렬된 사진 (백엔드에 사진 API 가 생기면 자동으로 보임, 없으면 칸을 숨김)
+    const img = new Image();
+    img.className = "photo"; img.alt = "정렬된 답안지 사진";
+    img.onload = () => { $("photoBox").innerHTML = ""; $("photoBox").appendChild(img); $("photoBox").style.marginBottom = "14px"; };
+    img.src = `${API_BASE}/api/exams/${e.exam_id}/sheets/${sid}/image`;
+
+    function drawQ() {
+      const qs = showAll ? read.mcq : flagged;
+      $("qlist").innerHTML = qs.map(m => {
+        const a = cur[m.q] || [];
+        const key = keyAns && keyAns[m.q];
+        return `<div class="qcard ${m.needs_review ? "flag" : ""}">
+          <span class="qn">${m.q}번</span>
+          <span class="why">${m.needs_review ? READ_WHY[m.status] || "확인 필요" : ""}</span>
+          <div class="fills">${m.fill.map((f, i) => `<div class="fill"><div class="bar"><i class="${f >= 0.6 ? "hi" : ""}" style="height:${Math.round(f * 100)}%"></i></div>${Math.round(f * 100)}%</div>`).join("")}</div>
+          <div class="bubbles" style="margin-left:auto">${Array.from({ length: C }, (_, i) =>
+            `<button type="button" class="bub ${a.includes(i + 1) ? "on" : ""}" data-q="${m.q}" data-c="${i + 1}">${i + 1}</button>`).join("")}
+            <button type="button" class="btn nores ${decided.has(m.q) && !a.length ? "on" : ""}" data-q="${m.q}" style="padding:6px 10px">무응답</button></div>
+          ${key ? `<span class="small muted" style="width:62px;text-align:right">정답 ${key.join(",")}</span>` : ""}
+        </div>`;
+      }).join("") || `<div class="empty small">확인할 문항이 없습니다. 학번만 맞는지 보고 ‘확인 완료’를 누르세요.</div>`;
+    }
+    drawQ();
+    $("showAll").onchange = (ev) => { showAll = ev.target.checked; drawQ(); };
+    $("qlist").onclick = (ev) => {
+      const nr = ev.target.closest(".nores");
+      if (nr) { cur[nr.dataset.q] = []; decided.add(Number(nr.dataset.q)); drawQ(); return; }
+      const b = ev.target.closest(".bub"); if (!b) return;
+      const q = b.dataset.q, c = Number(b.dataset.c), a = cur[q] || [];
+      cur[q] = a.includes(c) ? a.filter(x => x !== c) : [...a, c].sort();
+      decided.add(Number(q));
+      drawQ();
+    };
+    const goNext = () => {
+      const items = listItems().filter(s => s.sheet_id && s.sheet_id !== sid);
+      if (items[0]) { sel = items[0].sheet_id; drawList(); openSheet(sel); }
+      else { drawList(); box.innerHTML = `<div class="card"><div class="empty"><b>검수를 모두 마쳤습니다</b><a class="btn primary" href="#/results" style="margin-top:12px">결과 보기 →</a></div></div>`; }
+    };
+    $("skip").onclick = goNext;
+    $("saveRev").onclick = async () => {
+      const err = $("revErr"); err.style.display = "none";
+      const undecided = flagged.filter(m => !decided.has(m.q)).map(m => m.q);
+      if (undecided.length) {
+        err.style.display = ""; err.textContent = `${undecided.join(", ")}번 답을 골라 주세요 (비어 있으면 ‘무응답’).`;
+        if (!showAll) drawQ(); return;
+      }
+      // 보낼 값: 확인 대상 문항은 모두(= 사람이 확정), 나머지는 판독과 달라진 문항만
+      const corrections = {};
+      for (const m of read.mcq) {
+        const a = cur[m.q] || [];
+        const orig = m.answer || [];
+        if (m.needs_review || corr[m.q] != null || a.join() !== orig.join()) corrections[m.q] = a;
+      }
+      const sidVal = $("sidInput").value.trim();
+      if (sidVal && !/^\d+$/.test(sidVal)) { err.style.display = ""; err.textContent = "학번은 숫자만 넣을 수 있습니다."; return; }
+      if (!sidVal) { err.style.display = ""; err.textContent = "학번을 넣어 주세요."; return; }
+      const body = { corrections };
+      if (sidVal !== (sidRead.text || "")) body.student_id = sidVal;
+      try {
+        await api(`/api/exams/${e.exam_id}/sheets/${sid}/review`, jsonBody("PATCH", body));
+        app.reviewed.add(sid);
+        const s = app.sheets.find(x => x.sheet_id === sid); if (s && body.student_id) s.student_id = body.student_id;
+        toast("검수 내용을 저장했습니다");
+        renderSide(); goNext();
+      } catch (ex) { err.style.display = ""; err.textContent = ex.message; }
+    };
+  }
+}
+
+// ---------------- 5. 결과·엑셀 ----------------
+
+async function pageResults() {
+  const e = app.exam;
+  setTop("5. 결과·엑셀", "검수 내용과 최신 정답표로 다시 채점한 결과입니다.",
+    `<a class="btn primary" href="${API_BASE}/api/exams/${e.exam_id}/results.xlsx">엑셀 내려받기</a>`);
+  let res;
+  try { res = await api(`/api/exams/${e.exam_id}/results`); }
+  catch (ex) {
+    if (ex.status === 409) {
+      setTop("5. 결과·엑셀", "");
+      $("view").innerHTML = `<div class="card"><div class="empty"><b>정답표가 아직 없습니다</b>채점하려면 정답부터 넣어 주세요.<br><a class="btn primary" href="#/key" style="margin-top:14px">정답 입력하기</a></div></div>`;
+      return;
+    }
+    throw ex;
+  }
+  if (!res.length) {
+    $("view").innerHTML = `<div class="card"><div class="empty"><b>아직 채점할 답안지가 없습니다</b><a class="btn primary" href="#/upload" style="margin-top:14px">사진 올리기</a></div></div>`;
+    return;
+  }
+  // 상태별로 나누고, 확정 점수로 평균·최고·최저 계산
+  const conf = res.filter(r => r.status === "확정");
+  const pend = res.filter(r => r.status === "검수 대기");
+  const retake = res.filter(r => r.status === "재촬영 필요");
+  const scores = conf.map(r => r.score);
+  const total = res.find(r => r.total_points != null)?.total_points;
+  const avg = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : null;
+
+  // 문항별 정답률 (판독한 장 기준, 검수 대기 문항은 빼고 계산)
+  const N = e.num_questions, rates = [];
+  for (let q = 1; q <= N; q++) {
+    let c = 0, n = 0;
+    for (const r of res) { const it = (r.items || [])[q - 1]; if (it && it.result !== "pending") { n++; if (it.result === "correct") c++; } }
+    rates.push({ q, rate: n ? c / n : null });
+  }
+
+  const statusPill = (r) => r.status === "확정" ? `<span class="pill ok">확정</span>`
+    : r.status === "검수 대기" ? `<span class="pill warn">검수 대기</span>` : `<span class="pill bad">재촬영 필요</span>`;
+  const sorted = [...res].sort((a, b) => (a.student_id || "~").localeCompare(b.student_id || "~"));
+
+  $("view").innerHTML = `
+    <div class="stats">
+      <div class="stat"><div class="k">채점한 답안지</div><div class="v">${res.length}<small> 장</small></div></div>
+      <div class="stat"><div class="k">평균 (확정 ${conf.length}명)</div><div class="v">${fmtNum(avg)}<small> / ${fmtNum(total)}</small></div></div>
+      <div class="stat"><div class="k">최고 · 최저</div><div class="v">${scores.length ? `${fmtNum(Math.max(...scores))} · ${fmtNum(Math.min(...scores))}` : "-"}</div></div>
+      <div class="stat ${pend.length ? "warn" : ""}"><div class="k">검수 대기</div><div class="v">${pend.length}<small> 장</small></div></div>
+      <div class="stat ${retake.length ? "bad" : ""}"><div class="k">재촬영 필요</div><div class="v">${retake.length}<small> 장</small></div></div>
+    </div>
+    ${pend.length ? `<div class="msg info">검수 대기 ${pend.length}장은 점수가 아직 확정되지 않았습니다. <a href="#/review">검수하러 가기 →</a></div>` : ""}
+    <div class="card">
+      <h2>학생별 점수</h2>
+      <p class="desc">학번 순서입니다. 검수 대기 답안지는 ‘지금까지 점수 ~ 가능한 최고점’으로 보여 줍니다.</p>
+      <div class="tablewrap"><table class="t">
+        <thead><tr><th>학번</th><th>사진 파일</th><th>상태</th><th class="num">점수</th><th class="num">맞음</th><th class="num">틀림</th><th class="num">무응답</th><th class="num">복수 표시</th></tr></thead>
+        <tbody>${sorted.map(r => `<tr>
+          <td class="mono">${esc(r.student_id || "-")}</td>
+          <td class="small">${esc(r.source)}</td>
+          <td>${statusPill(r)}${r.status === "재촬영 필요" && r.error ? `<div class="small muted">${esc(r.error)}</div>` : ""}</td>
+          <td class="num"><b>${r.status === "확정" ? fmtNum(r.score) : r.status === "검수 대기" ? `${fmtNum(r.confirmed_score)}~${fmtNum(r.max_possible)}` : "-"}</b>${r.total_points != null ? `<span class="muted"> / ${fmtNum(r.total_points)}</span>` : ""}</td>
+          <td class="num">${r.counts?.correct ?? "-"}</td><td class="num">${r.counts?.wrong ?? "-"}</td>
+          <td class="num">${r.counts?.blank ?? "-"}</td><td class="num">${r.counts?.multi ?? "-"}</td>
+        </tr>`).join("")}</tbody></table></div>
+    </div>
+    <div class="card">
+      <h2>문항별 정답률</h2>
+      <p class="desc">빨간 막대는 정답률 40% 미만인 문항입니다. 정답을 잘못 넣었거나 어려운 문항일 수 있습니다.</p>
+      <div class="rates">${rates.map(x => `<div class="rate"><b>${x.q}번</b>
+        <div class="track"><div class="${x.rate != null && x.rate < 0.4 ? "low" : ""}" style="width:${x.rate == null ? 0 : Math.round(x.rate * 100)}%"></div></div>
+        <span class="num" style="text-align:right">${x.rate == null ? "-" : Math.round(x.rate * 100) + "%"}</span></div>`).join("")}</div>
+    </div>`;
+}
+
+// ---------------- 시작 ----------------
+// 마지막으로 고른 시험이 있으면 다시 불러오고, 주소에 맞는 페이지를 그림
+(async () => {
+  let last = null; try { last = localStorage.getItem(LS_CURRENT); } catch (_) {}
+  if (last) await selectExam(last).catch(() => {});
+  route();
+})();
+</script>
+</body>
+</html>
