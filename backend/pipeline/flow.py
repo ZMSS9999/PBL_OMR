@@ -64,13 +64,20 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
+import os
+
 import numpy as np
 
+import dual_verify
 from grading.answer_key import AnswerKey
 from grading.excel import write_results_xlsx
 from grading.score import grade_sheet, retake_record
 from pipeline.align import AlignError, AlignResult, align
 from pipeline.read import ReadConfig, read_sheet
+
+
+# 이중 검증(규칙 기반 + CNN) 사용 여부. 끄려면 환경변수 OMR_DUAL_VERIFY=0 (또는 아래 값을 False로)
+USE_DUAL_VERIFY = os.environ.get("OMR_DUAL_VERIFY", "1") != "0"
 
 
 class WrongSheetError(ValueError):
@@ -254,6 +261,8 @@ def run_photo(photo_bgr: np.ndarray, exam: dict[str, Any], layout: dict[str, Any
         r.status, r.error = WRONG_EXAM, str(e)
         return r
     r.read = step_read(r.align.warped, layout, cfg)             # P3 (P1의 warped 사용)
+    if USE_DUAL_VERIFY:                                         # P3 보강: CNN 이중 검증 (dual_verify/, 객관식만)
+        r.read = dual_verify.verify_sheet(r.read, r.align.warped, layout)
     if key is not None:
         r.grade = step_grade(r.read, key)                       # P4 (P3의 출력 사용)
         r.grade["source"] = source                              # 엑셀에서 어느 사진의 결과인지 표시용
