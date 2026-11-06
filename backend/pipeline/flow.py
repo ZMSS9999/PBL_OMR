@@ -64,8 +64,6 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
-import os
-
 import numpy as np
 
 import dual_verify
@@ -76,8 +74,8 @@ from pipeline.align import AlignError, AlignResult, align
 from pipeline.read import ReadConfig, read_sheet
 
 
-# 이중 검증(규칙 기반 + CNN) 사용 여부. 끄려면 환경변수 OMR_DUAL_VERIFY=0 (또는 아래 값을 False로)
-USE_DUAL_VERIFY = os.environ.get("OMR_DUAL_VERIFY", "1") != "0"
+# 이중 검증(규칙 기반 + CNN) 사용 여부. True = 켜짐, False = 끔 (끄면 팀원 방식 그대로 동작)
+USE_DUAL_VERIFY = True
 
 
 class WrongSheetError(ValueError):
