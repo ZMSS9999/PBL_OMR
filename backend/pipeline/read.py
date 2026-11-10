@@ -17,7 +17,40 @@
       read["summary"]       : 상태별 개수, 검수 필요 여부
   → P4 채점(grading/score.py)은 answer와 student_id.text/raw만 씀
 
-[1단계: 칸 하나 판정]
+[판독 방식 2가지] (ReadConfig.method)
+  - "darkness" (기본, 2026-11-06~): 잉크 농도 방식. 아래 [잉크 농도 방식] 참고
+  - "fill"     (이전 방식): 이진화 후 검은 픽셀 비율. 아래 [1단계] 참고. 비교 실험용으로 남겨 둠
+
+[잉크 농도 방식] (read_sheet_darkness)
+  합성 데이터 1,004장(22.6만 칸) 실험으로 정함 (checkmate 문서/판독규칙_개선_실험 참고)
+  1. 인쇄 마스크(L1): 같은 선지 번호(객관식) / 같은 값(학번) 칸들의 중앙값 이미지에서 진한 곳
+     = 칸 안 인쇄 숫자·테두리. 마킹된 칸은 소수라 중앙값에서 빠짐 → 사진마다 스스로 맞춤
+  2. 칸마다 인쇄 마스크를 뺀 픽셀로 3가지 값 계산 (잉크 농도 = 종이 대비 어두운 정도 = (종이 밝기 - 픽셀) / 종이 밝기, 0~1)
+       g    : 안쪽 70% 원의 평균 잉크 농도     → 정상 마킹 0.76~1.0 / 흐림·지운 흔적 0.15~0.40 / 빈칸 0.00~0.09
+       cov  : 안쪽 원에서 진한 픽셀(0.45 초과) 비율 → 얇게 채움·체크 구분
+       ring : 칸 바깥 링(반지름 1.12~1.45배)의 진한 픽셀 비율 → 동그라미 표시 0.36~0.98 / 그 외 0.00~0.11
+  3. 칸 상태: marked(g 또는 cov ≥ 0.60) / ambiguous(cov ≥ 0.25) / light(g ≥ 0.10, 연한 회색)
+              / ring(안은 비고 바깥 링에 잉크) / blank
+  4. 문항 판정 (decide_group_darkness)
+       - ambiguous 칸 있음                → 보류 (얇게 채움·체크)
+       - marked 칸 있음                   → 답 = marked 칸. 같은 문항의 light 칸은 지운 흔적으로 보고 무시
+       - marked 없이 ring 칸 있음         → 보류 (동그라미 표시, CNN 전까지 사람 확인)
+       - marked 없이 light 칸만 1개       → 흐린 마킹. faint_policy="accept"면 답으로, "review"면 보류
+       - 아무것도 없음                    → 무응답. 단 과노출 사진이면 보류 (연한 마킹이 날아갔을 수 있음)
+  5. 과노출 확인: 칸 주변 인쇄 잉크 대비(97백분위 잉크 농도)의 사진 전체 중앙값이 expo_min 미만이면
+     summary["overexposed"] = True (합성 데이터: 정상 0.43~0.52, 너무 밝은 사진 0.24~0.43)
+  6. 과노출 사진 처리 (expo_policy, 2026-11-07~ 3단계 방식 B)
+       - 인쇄 잉크 대비 < expo_retake(임시 0.24) : 아주 밝음 → summary["retake"] = True → flow.py가 '재촬영 필요(너무 밝음)'로 처리
+       - expo_retake ~ expo_min(0.42)            : 조금 밝음 → 채점은 하되 무응답 문항만 검수 (흐린 마킹이 날아갔을 수 있음)
+       - expo_min 이상                            : 정상
+       근거(합성 10,044장): 0.42 아래부터 흐린 마킹이 사라지기 시작 (0.40~0.42 39%, 0.31 아래 87~97%) → 0.42 아래에 안전한 값 없음.
+       목표 재촬영률 5% 이하(kim, 11/6)에 맞춰 expo_retake를 정함. 합성에서 0.24 = 재촬영 약 1.8~8%. 실측 분포로 다시 정할 것
+       - expo_policy="review": 재촬영 없이 0.42 미만은 모두 무응답 문항만 검수
+  7. 부분 반사 (glare_min, 2026-11-07~): 사진 전체는 정상인데 문항 주변 인쇄 잉크 대비(local_contrast)만 낮으면
+     그 문항은 판정과 상관없이 검수 (반사로 진한 마킹·동그라미까지 사라질 수 있음). 반사 문항이 glare_retake_frac(30%)를
+     넘으면 장 전체 재촬영. 과노출 사진(6번)에는 적용 안 함
+
+[1단계: 칸 하나 판정] (이전 방식 "fill")
   - 정렬 이미지 전체를 적응형 이진화 (주변 밝기 기준으로 흑백 구분 → 그림자·조명 차이에 강함)
   - 동그라미 안쪽 70% 원 안에서 검은 픽셀 비율(fill) 계산
       · 테두리 선은 안쪽 원 밖이라 빠짐
@@ -64,14 +97,18 @@
   - read_mcq()       : 객관식 전 문항 판독
   - read_student_id(): 학번 판독
   - refine_offsets() : 블록별 칸 위치 미세 보정 (인쇄 위치 차이 흡수)
-  - read_sheet()     : P3 메인 함수. 답안지 한 장 전체 판독 → read dict
+  - read_sheet()     : P3 메인 함수. 답안지 한 장 전체 판독 → read dict (method에 따라 아래 함수로 넘김)
+  - read_sheet_darkness() : 잉크 농도 방식 판독 (기본)
+  - cell_state_darkness() / decide_group_darkness() : 잉크 농도 방식의 칸 상태 / 문항 판정
+  - question_confidence()  : 문항 신뢰도 0~1 (기준값까지 거리, conf_min 미만이면 검수)
 
 [사용 예]
   from pipeline.read import read_sheet, ReadConfig
   read = read_sheet(res.warped, layout)                         # res = align() 결과
   read["mcq"][0]          # 예: {"q": 1, "answer": [3], "status": "ok", ...}
   read["student_id"]["text"]   # 예: "2026103456" (못 읽으면 None)
-  read2 = read_sheet(res.warped, layout, ReadConfig(marked_min=0.5))   # 기준값 바꿔 실험
+  read2 = read_sheet(res.warped, layout, ReadConfig(method="fill"))    # 이전 방식으로 비교
+  read3 = read_sheet(res.warped, layout, ReadConfig(faint_policy="review"))   # 흐린 마킹은 검수로
 """
 from __future__ import annotations
 
@@ -85,6 +122,9 @@ from sheetgen import frame as F
 from sheetgen.layout import mm_to_px
 
 MARKED, AMBIGUOUS, BLANK = "marked", "ambiguous", "blank"   # 칸 상태 3가지 (마킹 / 애매 / 빈칸)
+RETAKE_GLARE_MSG = "답안지 일부에 빛 반사가 있어 마킹이 보이지 않을 수 있음. 반사가 없는 곳에서 다시 찍어 주세요"
+RETAKE_BRIGHT_MSG = "사진이 너무 밝아 연한 마킹이 보이지 않을 수 있음. 조명 반사를 피해 다시 찍어 주세요"
+LIGHT, RING = "light", "ring"   # 잉크 농도 방식에서만 쓰는 칸 상태 (연한 회색 / 칸 바깥 링 잉크)
 
 
 @dataclass
@@ -101,6 +141,24 @@ class ReadConfig:
     offset_c: int = 12             # 적응형 이진화 상수 (클수록 옅은 자국을 덜 잡음)
     dpi: int = F.CANONICAL_DPI     # warped 이미지 해상도 (mm → px 변환에 사용, 기본 200)
     refine_max_mm: float = 2.5     # 칸 위치 미세 보정 최대 이동량 (mm). 0이면 보정 안 함
+    # ---- 잉크 농도 방식("darkness") 설정. 근거는 맨 위 [잉크 농도 방식] 참고 ----
+    method: str = "darkness"       # "darkness"(잉크 농도 방식, 기본) / "fill"(이전 방식)
+    solid_min: float = 0.60        # g 또는 cov가 이 값 이상이면 marked
+    partial_min: float = 0.25      # cov가 이 값 이상이면 ambiguous (얇게 채움·체크)
+    light_min: float = 0.10        # g가 이 값 이상이면 light (흐림·지운 흔적). 빈칸 99.9%는 0.09 이하
+    ring_min: float = 0.15         # ring이 이 값 이상이면 ring (동그라미 표시)
+    ink_dark: float = 0.45         # 진한 픽셀로 보는 잉크 농도 (cov, ring 계산용)
+    print_dark: float = 0.15       # 인쇄 마스크로 보는 중앙값 잉크 농도
+    expo_min: float = 0.42         # 인쇄 잉크 대비 중앙값이 이보다 낮으면 과노출
+    faint_policy: str = "accept"   # 흐린 마킹(light 1개) 처리: "accept"(답으로 인정) / "review"(검수)
+    expo_retake: float = 0.24      # 인쇄 잉크 대비가 이보다 낮으면 재촬영 (임시값, 목표 재촬영률 5%로 실측에서 다시 정함)
+    glare_min: float = 0.38        # 문항 주변 인쇄 잉크 대비가 이보다 낮으면 부분 반사로 보고 검수 (0 = 끔)
+                                   # 합성 가공 실험(11/7): 원본 문항 최소 0.406, 반사 사진 오판독 464 → 18문항
+    glare_retake_frac: float = 0.3 # 부분 반사 문항이 이 비율을 넘으면 장 전체 재촬영
+    blur_min: float = 100.0        # 사진 선명도(blur_var, align.py)가 이보다 낮으면 재촬영 (flow.py가 확인)
+                                   # 합성 가공 실험(11/7): 원본 최소 142, 손떨림 8px 이상에서 오판독 → 100. 사진 해상도에 따라 값이 달라져 실측으로 다시 정할 것
+    conf_min: float = 0.0          # 문항 신뢰도가 이보다 낮으면 검수 (0 = 끔. 합성: 0.2면 검수 +4.1%p, 오판독 29 → 1문항)
+    expo_policy: str = "retake"    # 과노출 사진 처리: "retake"(아주 밝으면 재촬영 + 조금 밝으면 무응답 검수) / "review"(재촬영 없이 무응답 검수)
 
 
 def binarize(warped_bgr: np.ndarray, cfg: ReadConfig) -> np.ndarray:
@@ -340,6 +398,258 @@ def refine_offsets(binv: np.ndarray, layout: dict[str, Any], cfg: ReadConfig) ->
     return out, {"mcq": mcq_off, "student_id": [sdx, sdy]}
 
 
+# ---------------- 잉크 농도 방식 (method="darkness") ----------------
+def _crop_darkness(gray: np.ndarray, bubble: dict[str, Any], half: int, cfg: ReadConfig) -> np.ndarray:
+    """칸 중심 기준 (2*half) 정사각형 크롭의 잉크 농도 맵 (0~1, 1 = 종이 대비 가장 진함).
+
+    종이 밝기 = 크롭의 90백분위 (크롭 대부분이 종이라서) → 그림자 진 칸은 그 주변 종이 기준으로 잼.
+
+    매개변수:
+        gray: 정렬 이미지 흑백 (uint8). 가장자리에 half만큼 흰색 여백을 붙인 것
+        bubble: layout 칸 하나 ("center_mm" 사용)
+        half: 크롭 반 변 길이 px
+        cfg: 판독 설정 (dpi 사용)
+    반환:
+        (2*half, 2*half) float32 배열
+    """
+    cx = int(round(mm_to_px(bubble["center_mm"][0], cfg.dpi))) + half   # 여백 붙인 만큼 이동
+    cy = int(round(mm_to_px(bubble["center_mm"][1], cfg.dpi))) + half
+    c = gray[cy - half:cy + half, cx - half:cx + half].astype(np.float32)
+    paper = max(float(np.percentile(c, 90)), 1.0)
+    return np.clip((paper - c) / paper, 0, 1)
+
+
+def _print_masks(crops: dict[Any, list[np.ndarray]], cfg: ReadConfig) -> dict[Any, np.ndarray]:
+    """같은 묶음(선지 번호 / 학번 값) 크롭들의 중앙값 → 인쇄 마스크 (True = 인쇄된 숫자·테두리).
+
+    마킹된 칸은 묶음 안에서 소수라 중앙값에 안 남음. 가장자리 흐림을 덮으려고 1px 넓힘.
+
+    매개변수:
+        crops: {묶음 키: 잉크 농도 크롭 목록}
+        cfg: 판독 설정 (print_dark 사용)
+    반환:
+        {묶음 키: bool 배열}
+    """
+    out = {}
+    for k, cs in crops.items():
+        med = np.median(np.stack(cs), axis=0)
+        out[k] = cv2.dilate((med > cfg.print_dark).astype(np.uint8), np.ones((3, 3), np.uint8)) > 0
+    return out
+
+
+def _cell_values(dark: np.ndarray, pmask: np.ndarray, radius_px: float, cfg: ReadConfig) -> tuple[float, float, float]:
+    """칸 하나의 (g, cov, ring). 인쇄 마스크 픽셀은 모두 뺌.
+
+    매개변수:
+        dark: _crop_darkness() 결과
+        pmask: 이 칸 묶음의 인쇄 마스크
+        radius_px: 칸 반지름 px
+        cfg: 판독 설정 (inner_ratio, ink_dark 사용)
+    반환:
+        g    : 안쪽 원 평균 잉크 농도
+        cov  : 안쪽 원 진한 픽셀 비율
+        ring : 바깥 링(반지름 1.12~1.45배) 진한 픽셀 비율
+    """
+    s = dark.shape[0]
+    yy, xx = np.mgrid[0:s, 0:s]
+    dist = np.hypot(xx - s / 2 + 0.5, yy - s / 2 + 0.5)
+    inner = (dist <= cfg.inner_ratio * radius_px) & ~pmask
+    ring = (dist >= 1.12 * radius_px) & (dist <= 1.45 * radius_px) & ~pmask
+    g = float(dark[inner].mean()) if inner.any() else 0.0
+    cov = float((dark[inner] > cfg.ink_dark).mean()) if inner.any() else 0.0
+    rg = float((dark[ring] > cfg.ink_dark).mean()) if ring.any() else 0.0
+    return g, cov, rg
+
+
+def cell_state_darkness(g: float, cov: float, ring: float, cfg: ReadConfig) -> str:
+    """(g, cov, ring) → 칸 상태 (marked / ambiguous / light / ring / blank).
+
+    매개변수:
+        g, cov, ring: _cell_values() 결과
+        cfg: 판독 설정 (solid_min, partial_min, light_min, ring_min)
+    반환:
+        칸 상태 문자열
+    """
+    if g >= cfg.solid_min or cov >= cfg.solid_min:
+        return MARKED
+    if cov >= cfg.partial_min:
+        return AMBIGUOUS
+    if g >= cfg.light_min:
+        return LIGHT
+    if ring >= cfg.ring_min:
+        return RING
+    return BLANK
+
+
+def decide_group_darkness(states: list[str], values: list[int], cfg: ReadConfig,
+                          overexposed: bool = False) -> tuple[list[int] | None, str, str]:
+    """칸 상태 묶음 → (답, 상태, 이유). 답·상태는 decide_group()과 같은 형식.
+
+    이유(reason): 검수로 보낸 이유나 특별 처리 내용 (검수 화면·실험 집계용)
+      "partial" 얇게 채움·체크 / "ring" 동그라미 표시 / "light" 흐린 마킹(보류)
+      "faint" 흐린 마킹을 답으로 인정 / "erasure" 지운 흔적을 무시함 / "overexposed" 과노출 사진의 무응답
+      "low_conf" 신뢰도가 conf_min 미만이라 검수 / "glare" 문항 주변 부분 반사라 검수 (read_sheet_darkness에서 붙임)
+      "" 특별한 것 없음
+
+    매개변수:
+        states: 칸 상태 목록 (cell_state_darkness() 결과)
+        values: 칸 값 목록 (객관식 1~k, 학번 0~9)
+        cfg: 판독 설정 (faint_policy 사용)
+        overexposed: 사진이 과노출이면 True
+    반환:
+        (답, 상태, 이유) 예: ([3], "ok", "erasure") / (None, "ambiguous", "ring")
+    """
+    if AMBIGUOUS in states:
+        return None, "ambiguous", "partial"
+    solid = [v for v, s in zip(values, states) if s == MARKED]
+    light = [v for v, s in zip(values, states) if s == LIGHT]
+    if solid:
+        return solid, "ok" if len(solid) == 1 else "multi", "erasure" if light else ""
+    if RING in states:
+        return None, "ambiguous", "ring"
+    if light:
+        if cfg.faint_policy == "accept" and len(light) == 1:
+            return light, "ok", "faint"
+        return None, "ambiguous", "light"
+    if overexposed:
+        return None, "ambiguous", "overexposed"
+    return [], "blank", ""
+
+
+def question_confidence(vals: list[tuple[float, float, float]], cfg: ReadConfig) -> float:
+    """문항 신뢰도 0~1 (E6 S1). 답을 바꿀 수 있는 가장 가까운 기준값까지의 거리를 칸마다 재고, 가장 작은 값을 씀.
+
+    칸별로 보는 기준값 (거리 ÷ 폭, 0~1로 자름)
+      - marked 칸                 : solid_min까지 (폭 0.40). 덜 진하면 마킹이 빠질 수 있음
+      - 진한 칸이 있는 문항의 나머지: solid_min·partial_min까지 (폭 0.25). 진해지면 이중 마킹, cov가 늘면 애매
+                                    (옅은 칸은 어차피 지운 흔적으로 무시하므로 light_min은 안 봄)
+      - 진한 칸 없고 light 칸      : light_min·solid_min·partial_min까지 (폭 0.15)
+      - 진한 칸 없고 빈 칸         : light_min·partial_min·ring_min까지 (폭 0.10). 넘으면 흐린 마킹으로 읽힘
+    합성 10,044장: 오판독 문항 중앙값 0.06, 정답 문항 중앙값 0.76, 둘을 가르는 AUC 0.97
+
+    매개변수:
+        vals: 칸별 (g, cov, ring) 목록 (_cell_values() 결과)
+        cfg: 판독 설정
+    반환:
+        신뢰도 (1 = 기준값에서 충분히 멂, 0 = 기준값 바로 옆)
+    """
+    sm, pm, lm, rm = cfg.solid_min, cfg.partial_min, cfg.light_min, cfg.ring_min
+    solid = any(g >= sm or c >= sm for g, c, _ in vals)
+    conf = 1.0
+    for g, c, r in vals:
+        if g >= sm or c >= sm:
+            v = (max(g, c) - sm) / 0.40
+        elif solid:
+            v = min(sm - g, pm - c) / 0.25
+        elif g >= lm:
+            v = min(g - lm, sm - g, pm - c) / 0.15
+        else:
+            v = min(lm - g, pm - c, rm - r) / 0.10
+        conf = min(conf, max(0.0, min(1.0, v)))
+    return conf
+
+
+def read_sheet_darkness(warped_bgr: np.ndarray, layout: dict[str, Any], cfg: ReadConfig) -> dict[str, Any]:
+    """잉크 농도 방식 P3 판독. 반환 형식은 read_sheet()와 같고, 아래 키가 더 붙음.
+
+      mcq[i]["reason"], mcq[i]["confidence"], mcq[i]["local_contrast"], mcq[i]["g"], mcq[i]["cov"], mcq[i]["ring"]  (fill에는 g를 넣음)
+      summary["overexposed"], summary["print_contrast"], summary["retake"], summary["retake_reason"]
+
+    매개변수:
+        warped_bgr: P1 정렬 이미지
+        layout: 양식 좌표 dict
+        cfg: 판독 설정
+    반환:
+        read dict
+    """
+    binv = binarize(warped_bgr, cfg)
+    layout, offsets = refine_offsets(binv, layout, cfg)   # 칸 위치 보정은 이전 방식과 같음
+    gray = cv2.cvtColor(warped_bgr, cv2.COLOR_BGR2GRAY) if warped_bgr.ndim == 3 else warped_bgr
+    r_all = [c["radius_mm"] for q in layout["mcq"]["questions"] for c in q["choices"]] + \
+            [b["radius_mm"] for b in layout["student_id"]["bubbles"]]
+    half = int(np.ceil(mm_to_px(max(r_all) * 1.5, cfg.dpi))) + 1   # 바깥 링까지 들어가는 크롭 크기
+    gp = cv2.copyMakeBorder(gray, half, half, half, half, cv2.BORDER_CONSTANT, value=255)
+
+    # 1. 크롭과 인쇄 마스크 (객관식은 선지 번호별, 학번은 값별로 묶음)
+    sid = layout["student_id"]
+    mcq_d = [[_crop_darkness(gp, c, half, cfg) for c in q["choices"]] for q in layout["mcq"]["questions"]]
+    sid_d = [_crop_darkness(gp, b, half, cfg) for b in sid["bubbles"]]
+    groups: dict[Any, list[np.ndarray]] = {}
+    for q, ds in zip(layout["mcq"]["questions"], mcq_d):
+        for c, d in zip(q["choices"], ds):
+            groups.setdefault(("mcq", c["choice"]), []).append(d)
+    for b, d in zip(sid["bubbles"], sid_d):
+        groups.setdefault(("sid", b["value"]), []).append(d)
+    pm = _print_masks(groups, cfg)
+
+    # 2. 과노출 확인: 인쇄 잉크 대비 = 크롭별 잉크 농도 97백분위의 중앙값
+    all_d = [d for ds in mcq_d for d in ds] + sid_d
+    contrast = float(np.median([np.percentile(d, 97) for d in all_d])) if all_d else 1.0
+    # 문항 주변 인쇄 잉크 대비 (부분 반사 확인용): 그 문항 칸들의 97백분위 중앙값
+    local_pc = [float(np.median([np.percentile(d, 97) for d in ds])) for ds in mcq_d]
+    over = contrast < cfg.expo_min
+    retake = cfg.expo_policy == "retake" and contrast < cfg.expo_retake   # 아주 밝음 → 장 단위 재촬영
+
+    # 3. 객관식
+    mcq: list[dict[str, Any]] = []
+    n_glare = 0
+    for q, ds, lpc in zip(layout["mcq"]["questions"], mcq_d, local_pc):
+        vals = [_cell_values(d, pm[("mcq", c["choice"])], mm_to_px(c["radius_mm"], cfg.dpi), cfg)
+                for c, d in zip(q["choices"], ds)]
+        states = [cell_state_darkness(*v, cfg) for v in vals]
+        answer, status, reason = decide_group_darkness(states, [c["choice"] for c in q["choices"]], cfg, over)
+        # 신뢰도: 이미 검수로 가는 문항은 0, 자동 판정 문항은 기준값까지의 거리
+        conf = question_confidence(vals, cfg) if status in ("ok", "blank", "multi") else 0.0
+        if status in ("ok", "blank", "multi") and conf < cfg.conf_min:   # 신뢰도 낮음 → 검수
+            answer, status, reason = None, "ambiguous", "low_conf"
+        # 부분 반사 → 판정과 상관없이 검수. 사진 전체가 밝은(과노출) 사진은 B 방식이 따로 처리하므로 제외
+        if cfg.glare_min > 0 and not over and lpc < cfg.glare_min:
+            n_glare += 1
+            if status != "ambiguous":
+                answer, status, reason = None, "ambiguous", "glare"
+        mcq.append({"q": q["q"], "answer": answer, "status": status, "needs_review": status == "ambiguous",
+                    "reason": reason, "confidence": round(conf, 3), "local_contrast": round(lpc, 3), "fill": [round(v[0], 3) for v in vals], "cells": states,
+                    "g": [round(v[0], 3) for v in vals], "cov": [round(v[1], 3) for v in vals],
+                    "ring": [round(v[2], 3) for v in vals]})
+
+    # 4. 학번 (자리마다 값 0~9)
+    digits: list[dict[str, Any]] = []
+    for di in range(sid["digits"]):
+        idx = sorted((i for i, b in enumerate(sid["bubbles"]) if b["digit_index"] == di),
+                     key=lambda i: sid["bubbles"][i]["value"])
+        vals = [_cell_values(sid_d[i], pm[("sid", sid["bubbles"][i]["value"])],
+                             mm_to_px(sid["bubbles"][i]["radius_mm"], cfg.dpi), cfg) for i in idx]
+        states = [cell_state_darkness(*v, cfg) for v in vals]
+        value, status, reason = decide_group_darkness(states, [sid["bubbles"][i]["value"] for i in idx], cfg, over)
+        digits.append({"digit_index": di, "value": value, "status": status, "reason": reason,
+                       "fill": [round(v[0], 3) for v in vals]})
+    text = "".join(str(d["value"][0]) if d["status"] == "ok" and d["value"] else "?" for d in digits)
+    statuses = {d["status"] for d in digits}
+    sstatus = "ok" if statuses == {"ok"} else ("blank" if statuses == {"blank"} else "review")
+    sid_out = {"text": text if sstatus == "ok" else None, "raw": text, "status": sstatus,
+               "needs_review": sstatus != "ok", "digits": digits}
+
+    counts: dict[str, int] = {}
+    for q in mcq:
+        counts[q["status"]] = counts.get(q["status"], 0) + 1
+    glare_retake = cfg.expo_policy == "retake" and n_glare > cfg.glare_retake_frac * max(1, len(mcq))
+    return {
+        "template_id": layout["template_id"],
+        "template_version": layout["template_version"],
+        "student_id": sid_out,
+        "mcq": mcq,
+        "summary": {"status_counts": counts,
+                    "needs_review": sid_out["needs_review"] or any(q["needs_review"] for q in mcq),
+                    "overexposed": over, "print_contrast": round(contrast, 3),
+                    "min_confidence": min((q["confidence"] for q in mcq), default=1.0),
+                    "glare_questions": n_glare,
+                    "retake": retake or glare_retake,   # True면 flow.py가 재촬영 필요로 처리
+                    "retake_reason": RETAKE_BRIGHT_MSG if retake else (RETAKE_GLARE_MSG if glare_retake else None)},
+        "offsets_mm": offsets,
+        "read_config": asdict(cfg),
+    }
+
+
 def read_sheet(warped_bgr: np.ndarray, layout: dict[str, Any], cfg: ReadConfig | None = None) -> dict[str, Any]:
     """P3 메인 함수: 정렬된 답안지 한 장 판독. 결과는 JSON으로 그대로 저장 가능한 dict.
     이진화는 한 장에 한 번만 하고 모든 칸이 같은 이진 이미지를 씀 (속도).
@@ -361,6 +671,8 @@ def read_sheet(warped_bgr: np.ndarray, layout: dict[str, Any], cfg: ReadConfig |
         KeyError: layout에 필요한 키가 없을 때
     """
     cfg = cfg or ReadConfig()
+    if cfg.method == "darkness":
+        return read_sheet_darkness(warped_bgr, layout, cfg)
     binv = binarize(warped_bgr, cfg)
     layout, offsets = refine_offsets(binv, layout, cfg)   # 칸 위치 미세 보정 (인쇄 위치 차이 흡수)
     mcq = read_mcq(binv, layout, cfg)

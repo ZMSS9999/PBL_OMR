@@ -78,7 +78,7 @@ import os
 import tempfile
 from typing import Any, Literal
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -86,8 +86,8 @@ from pydantic import BaseModel, Field
 
 from sheetgen import NUM_CHOICES_RANGE, NUM_QUESTIONS_RANGE, LayoutOverflowError
 from grading import AnswerKeyError
+from . import access, accounts, admin_service, service
 from . import grading_service as gs
-from . import service
 
 # 서버 앱 객체. uvicorn이 "app.main:app" 으로 이 변수를 찾아 실행함 (title·version은 /docs 화면 제목)
 app = FastAPI(title="CheckMate API", version="0.2")
@@ -99,7 +99,36 @@ app.add_middleware(
     allow_origins=["http://localhost:5173", "http://localhost:3000",
                    "http://127.0.0.1:5173", "http://127.0.0.1:3000"],
     allow_methods=["*"], allow_headers=["*"],
+    allow_credentials=True,     # 로그인 쿠키를 함께 보내도록 허용 (React 개발 서버에서 부를 때)
 )
+
+
+# ---------------- 로그인 확인 (모든 /api 요청의 공통 검사) ----------------
+# 로그인 토큰을 담는 쿠키 이름. HttpOnly → 화면의 자바스크립트가 읽을 수 없어 토큰이 새어 나가기 어려움
+# 쿠키라서 <img src>, PDF·엑셀 내려받기 링크에도 자동으로 붙음 (따로 헤더를 넣을 필요 없음)
+SESSION_COOKIE = "cm_session"
+
+
+def current_user(request: Request) -> dict[str, Any]:
+    """요청한 사람의 계정 (FastAPI Depends 로 각 API 에 붙임). 로그인 안 했으면 401.
+
+    쿠키(cm_session) 또는 'Authorization: Bearer <토큰>' 헤더(명령행 도구·테스트용) 중 하나로 확인함.
+    """
+    token = request.cookies.get(SESSION_COOKIE)
+    auth = request.headers.get("authorization", "")
+    if not token and auth.lower().startswith("bearer "):
+        token = auth[7:].strip()
+    user = accounts.user_from_token(token)
+    if not user:
+        raise HTTPException(401, "로그인이 필요합니다")
+    return user
+
+
+def require_admin(user: dict[str, Any] = Depends(current_user)) -> dict[str, Any]:
+    """관리자만 부를 수 있는 API 에 붙임. 선생님이면 403."""
+    if user["role"] != "admin":
+        raise HTTPException(403, "관리자만 사용할 수 있습니다")
+    return user
 
 
 class AnswerSheetRequest(BaseModel):
@@ -147,9 +176,14 @@ class AnswerSheetResponse(BaseModel):
     created_at: str         # 생성 시각, 한국 시간 ISO 형식 (예: "2026-10-01T14:03:22+09:00")
     pdf_url: str            # 답안지 PDF 주소 (뒤에 ?download=true 붙이면 내려받기)
     template_url: str       # 양식 좌표 JSON 주소
+    owner: str | None = None        # 소유자(담당 선생님) 아이디. 관리자 기능 이전 시험은 None
+    owner_name: str | None = None   # 소유자 이름
+    my_level: str | None = None     # 요청한 사람의 이 시험 권한: view / review / owner / admin
+    my_scope: dict | None = None    # 내가 정답 입력·검수할 수 있는 문항 (access.my_scope)
+    sections: list | None = None    # 문항 범위(과목) 목록 [{"name", "from", "to", "assignees"}]
 
 
-def _to_response(rec: dict) -> AnswerSheetResponse:
+def _to_response(rec: dict, user: dict | None = None) -> AnswerSheetResponse:
     """시험 기록(exam.json 내용) → 답안지 응답 형식으로 변환.
 
     exam.json 에는 응답에 없는 항목(qr_payload 등)도 있어서, 응답 형식에 있는 키만 골라 담음.
@@ -166,11 +200,26 @@ def _to_response(rec: dict) -> AnswerSheetResponse:
         **{k: rec[k] for k in AnswerSheetResponse.model_fields if k in rec},
         pdf_url=f"/api/answer-sheets/{rec['exam_id']}/pdf",
         template_url=f"/api/templates/{rec['template_id']}/{rec['template_version']}",
+        **_access_fields(rec["exam_id"], user),
     )
 
 
+def _access_fields(exam_id: str, user: dict | None) -> dict[str, Any]:
+    """응답에 붙일 소유자·내 권한 항목. user 가 None 이면 빈 dict."""
+    if not user:
+        return {}
+    acc = access.get_access(exam_id)
+    owner = acc.get("owner")
+    owner_user = accounts.get_user(owner) if owner else None
+    rec = service.get_exam(exam_id) or {}
+    return {"owner": owner, "owner_name": owner_user["name"] if owner_user else owner,
+            "my_level": access.LEVEL_NAME[access.level_for(user, exam_id, acc)],
+            "my_scope": access.my_scope(user, exam_id, rec.get("num_questions", 0), acc),
+            "sections": acc.get("sections", [])}
+
+
 @app.get("/api/sheet-options")
-def sheet_options():
+def sheet_options(user: dict = Depends(current_user)):
     """입력 가능한 범위·기본값 알려 주기 (GET /api/sheet-options).
 
     프론트엔드가 슬라이더 최소·최대, 선지 버튼 개수, 글자 수 제한을 이 값으로 만듦
@@ -196,7 +245,7 @@ def sheet_options():
 
 
 @app.post("/api/answer-sheets", response_model=AnswerSheetResponse, status_code=201)
-def create_answer_sheet(req: AnswerSheetRequest):
+def create_answer_sheet(req: AnswerSheetRequest, user: dict = Depends(current_user)):
     """답안지 생성 (POST /api/answer-sheets) — 파이프라인 준비 단계.
 
     양식 좌표 계산·저장 → 시험 ID 발급 → QR 포함 PDF 생성 → exam.json 저장까지
@@ -216,11 +265,12 @@ def create_answer_sheet(req: AnswerSheetRequest):
         raise HTTPException(status_code=422, detail=str(e))
     except service.TemplateConflictError as e:
         raise HTTPException(status_code=500, detail=str(e))
-    return _to_response(rec)
+    access.set_owner(rec["exam_id"], user["username"])     # 만든 사람이 소유자
+    return _to_response(rec, user)
 
 
 @app.get("/api/answer-sheets/{exam_id}", response_model=AnswerSheetResponse)
-def get_answer_sheet(exam_id: str):
+def get_answer_sheet(exam_id: str, user: dict = Depends(current_user)):
     """시험 기록 조회 (GET /api/answer-sheets/{exam_id}).
 
     매개변수:
@@ -230,14 +280,11 @@ def get_answer_sheet(exam_id: str):
     예외:
         HTTP 404: 시험이 없거나 ID 형식이 틀림
     """
-    rec = service.get_exam(exam_id)
-    if not rec:
-        raise HTTPException(404, "시험을 찾을 수 없습니다")
-    return _to_response(rec)
+    return _to_response(_require_exam(exam_id, user), user)
 
 
 @app.get("/api/answer-sheets/{exam_id}/pdf")
-def get_answer_sheet_pdf(exam_id: str, download: bool = False):
+def get_answer_sheet_pdf(exam_id: str, download: bool = False, user: dict = Depends(current_user)):
     """답안지 PDF 파일 보내기 (GET /api/answer-sheets/{exam_id}/pdf).
 
     download 값에 따라 브라우저 동작이 달라짐: 파일 이름을 붙이면 '내려받기', 안 붙이면 화면에 바로 표시
@@ -251,6 +298,7 @@ def get_answer_sheet_pdf(exam_id: str, download: bool = False):
     예외:
         HTTP 404: PDF가 없거나 ID 형식이 틀림
     """
+    _require_exam(exam_id, user)
     path = service.exam_pdf_path(exam_id)
     if not path:
         raise HTTPException(404, "PDF를 찾을 수 없습니다")
@@ -259,7 +307,7 @@ def get_answer_sheet_pdf(exam_id: str, download: bool = False):
 
 
 @app.get("/api/templates/{template_id}/{version}")
-def get_template(template_id: str, version: str):
+def get_template(template_id: str, version: str, user: dict = Depends(current_user)):
     """양식 좌표 JSON 보내기 (GET /api/templates/{template_id}/{version}).
 
     template_id·version 이 영문·숫자로만 되어 있을 때만 파일을 찾음
@@ -319,8 +367,12 @@ class ReviewRequest(BaseModel):
     student_id: str | None = None
 
 
-def _require_exam(exam_id: str) -> dict[str, Any]:
-    """시험이 있는지 확인. 없으면 바로 404로 요청을 끝냄 (채점 API 함수들의 공통 첫 줄).
+def _require_exam(exam_id: str, user: dict[str, Any], need: int = access.VIEW) -> dict[str, Any]:
+    """시험이 있는지 + 요청한 사람에게 필요한 권한이 있는지 확인 (시험 API 함수들의 공통 첫 줄).
+
+    권한이 아예 없으면(목록에도 안 보이는 시험) 404 로 답함 → 다른 선생님 시험이 있는지조차 알 수 없게.
+    보기는 되지만 필요한 단계보다 낮으면 403.
+    need: access.VIEW(보기) / access.REVIEW(사진·검수) / access.OWNER(정답표·삭제·참여자)
 
     매개변수:
         exam_id: 시험 ID (예: "EX-20261001-8C7353")
@@ -332,6 +384,11 @@ def _require_exam(exam_id: str) -> dict[str, Any]:
     rec = service.get_exam(exam_id)
     if not rec:
         raise HTTPException(404, "시험을 찾을 수 없습니다")
+    lv = access.level_for(user, exam_id)
+    if lv == access.NONE:
+        raise HTTPException(404, "시험을 찾을 수 없습니다")
+    if lv < need:
+        raise HTTPException(403, f"이 시험에서 할 수 없는 작업입니다 (내 권한: {access.LEVEL_LABEL[access.LEVEL_NAME[lv]]})")
     return rec
 
 
@@ -363,7 +420,7 @@ def _sheet_summary(rec: dict[str, Any]) -> dict[str, Any]:
 
 
 @app.get("/api/exams/{exam_id}/answer-key/template")
-def answer_key_template(exam_id: str):
+def answer_key_template(exam_id: str, user: dict = Depends(current_user)):
     """빈 정답표 엑셀 내려받기 (GET /api/exams/{exam_id}/answer-key/template).
 
     이 시험의 문항 수·선지 수에 맞춘 엑셀을 만들어 보냄 → 선생님이 '정답'·'배점' 칸을 채워 다시 올림.
@@ -375,13 +432,13 @@ def answer_key_template(exam_id: str):
     예외:
         HTTP 404: 시험이 없음
     """
-    _require_exam(exam_id)
+    _require_exam(exam_id, user)
     return FileResponse(gs.make_answer_key_template(exam_id), media_type=XLSX,
                         filename=f"{exam_id}_정답표.xlsx")
 
 
 @app.put("/api/exams/{exam_id}/answer-key")
-def put_answer_key(exam_id: str, req: AnswerKeyRequest):
+def put_answer_key(exam_id: str, req: AnswerKeyRequest, user: dict = Depends(current_user)):
     """정답표 입력 (PUT /api/exams/{exam_id}/answer-key) — P4 채점의 기준이 되는 값.
 
     이미 정답표가 있으면 새 값으로 덮어씀 (PUT = 통째로 교체).
@@ -397,7 +454,7 @@ def put_answer_key(exam_id: str, req: AnswerKeyRequest):
         HTTP 404: 시험이 없음
         HTTP 422: 정답이 선지 범위를 벗어나는 등 정답표 형식 오류(AnswerKeyError)
     """
-    _require_exam(exam_id)
+    _require_exam(exam_id, user, access.OWNER)
     try:
         key = gs.set_answer_key(exam_id, req.answers, req.points, req.default_points)
     except AnswerKeyError as e:
@@ -406,7 +463,7 @@ def put_answer_key(exam_id: str, req: AnswerKeyRequest):
 
 
 @app.post("/api/exams/{exam_id}/answer-key/upload")
-async def upload_answer_key(exam_id: str, file: UploadFile = File(...)):
+async def upload_answer_key(exam_id: str, file: UploadFile = File(...), user: dict = Depends(current_user)):
     """정답표 파일 올리기 (POST /api/exams/{exam_id}/answer-key/upload).
 
     읽기 함수(load_answer_key)가 파일 경로를 받으므로, 올라온 내용을 임시 폴더에 파일로 잠깐 썼다가 읽음.
@@ -422,7 +479,7 @@ async def upload_answer_key(exam_id: str, file: UploadFile = File(...)):
         HTTP 422: 확장자가 .xlsx/.json 이 아님, 정답표 형식 오류,
                   문항 수·선지 수가 시험과 다름 (다른 시험 정답표를 잘못 올린 경우)
     """
-    _require_exam(exam_id)
+    _require_exam(exam_id, user, access.OWNER)
     # 파일 이름 끝(확장자)을 보고 ".xlsx" / ".json" / None 중 하나로 정함
     name = (file.filename or "").lower()
     suffix = ".xlsx" if name.endswith(".xlsx") else ".json" if name.endswith(".json") else None
@@ -442,7 +499,7 @@ async def upload_answer_key(exam_id: str, file: UploadFile = File(...)):
 
 
 @app.get("/api/exams/{exam_id}/answer-key")
-def get_answer_key(exam_id: str):
+def get_answer_key(exam_id: str, user: dict = Depends(current_user)):
     """저장된 정답표 조회 (GET /api/exams/{exam_id}/answer-key).
 
     매개변수:
@@ -452,7 +509,7 @@ def get_answer_key(exam_id: str):
     예외:
         HTTP 404: 시험이 없거나 정답표를 아직 입력하지 않음
     """
-    _require_exam(exam_id)
+    _require_exam(exam_id, user)
     key = gs.get_answer_key(exam_id)
     if not key:
         raise HTTPException(404, "정답표가 아직 없습니다")
@@ -460,7 +517,7 @@ def get_answer_key(exam_id: str):
 
 
 @app.post("/api/exams/{exam_id}/sheets", status_code=201)
-async def upload_sheets(exam_id: str, files: list[UploadFile] = File(...)):
+async def upload_sheets(exam_id: str, files: list[UploadFile] = File(...), user: dict = Depends(current_user)):
     """답안지 사진 여러 장 → 정렬 → QR 확인 → 규칙 기반 판독. 실패한 장도 사유와 함께 기록.
 
     (POST /api/exams/{exam_id}/sheets) 파이프라인 P1 정렬 → P2 시험 확인 → P3 판독.
@@ -470,6 +527,8 @@ async def upload_sheets(exam_id: str, files: list[UploadFile] = File(...)):
     장마다 결과 status:
         "rejected"     : 20MB 초과이거나 이미지 파일이 아님 (저장 안 함)
         "align_failed" : P1 정렬 실패 → 재촬영 필요 (저장함)
+        "too_bright"   : P3 과노출·부분 반사 판정 → 재촬영 필요 (저장함)
+        "too_blurry"   : P1 뒤 흐림 판정 → 재촬영 필요 (저장함)
         "wrong_exam"   : P2 다른 시험 답안지 (저장 안 함)
         "read"         : P3 판독까지 성공 (저장함)
 
@@ -482,7 +541,8 @@ async def upload_sheets(exam_id: str, files: list[UploadFile] = File(...)):
     예외:
         HTTP 404: 시험이 없음
     """
-    _require_exam(exam_id)
+    _require_exam(exam_id, user, access.REVIEW)
+    cfg = admin_service.read_config()      # 관리자 '시스템 설정'의 판독 기준값 (없으면 기본값)
     results = []
     for uf in files:
         data = await uf.read()
@@ -497,12 +557,51 @@ async def upload_sheets(exam_id: str, files: list[UploadFile] = File(...)):
             results.append({"source": uf.filename, "status": "rejected", "error": str(e)})
             continue
         # P1·P2·P3 처리 + 저장 → 목록용 요약으로 바꿔 담기
-        results.append(_sheet_summary(gs.process_photo(exam_id, img, uf.filename or "")))
+        results.append(_sheet_summary(gs.process_photo(exam_id, img, uf.filename or "", cfg=cfg)))
     return {"exam_id": exam_id, "sheets": results}
 
 
+class AnswerKeyPartRequest(BaseModel):
+    """PATCH /api/exams/{exam_id}/answer-key/draft 요청 본문 (일부 문항만 저장).
+
+    예: {"answers": {"11": 2, "12": [1, 3]}, "points": {"12": 2}}
+    """
+    answers: dict[str, Any] = Field(default_factory=dict)
+    points: dict[str, Any] = Field(default_factory=dict)
+    default_points: float | None = Field(None, ge=0)
+
+
+@app.get("/api/exams/{exam_id}/answer-key/draft")
+def get_answer_key_draft(exam_id: str, user: dict = Depends(current_user)):
+    """지금까지 입력된 정답 (GET /api/exams/{exam_id}/answer-key/draft). 문항 범위별 입력 중이면 빈 문항(missing)도 알려 줌."""
+    _require_exam(exam_id, user)
+    return gs.get_key_draft(exam_id)
+
+
+@app.patch("/api/exams/{exam_id}/answer-key/draft")
+def patch_answer_key_draft(exam_id: str, req: AnswerKeyPartRequest, user: dict = Depends(current_user)):
+    """내가 맡은 문항의 정답·배점만 저장 (PATCH /api/exams/{exam_id}/answer-key/draft).
+
+    소유자·관리자는 모든 문항, 문항 범위 담당자는 자기 범위만. 모든 문항이 차면 정답표가 완성됨(complete=True).
+    예외:
+        HTTP 403: 맡은 문항이 없거나 맡지 않은 문항을 보냄
+        HTTP 422: 선지 범위 밖 등 정답 형식 오류
+    """
+    exam = _require_exam(exam_id, user)
+    scope = access.my_scope(user, exam_id, exam["num_questions"])
+    if not scope["key"]:
+        raise HTTPException(403, "이 시험에서 정답을 입력할 수 있는 문항이 없습니다")
+    try:
+        return gs.merge_answer_key(exam_id, req.answers, req.points, req.default_points,
+                                   None if scope["all"] else set(scope["key"]))
+    except PermissionError as e:
+        raise HTTPException(403, str(e))
+    except (AnswerKeyError, ValueError) as e:
+        raise HTTPException(422, str(e))
+
+
 @app.get("/api/exams", response_model=list[AnswerSheetResponse])
-def list_exams():
+def list_exams(user: dict = Depends(current_user)):
     """전체 시험 목록 (GET /api/exams). 웹의 '시험 목록' 화면용.
 
     매개변수:
@@ -510,11 +609,15 @@ def list_exams():
     반환:
         AnswerSheetResponse 목록 (만든 시각이 최근인 것부터). 시험이 없으면 빈 목록
     """
-    return [_to_response(r) for r in service.list_exams()]
+    out = []
+    for r in service.list_exams():
+        if access.level_for(user, r["exam_id"]) > access.NONE:      # 내가 볼 수 있는 시험만
+            out.append(_to_response(r, user))
+    return out
 
 
 @app.delete("/api/exams/{exam_id}", status_code=204)
-def delete_exam(exam_id: str):
+def delete_exam(exam_id: str, user: dict = Depends(current_user)):
     """시험 삭제 (DELETE /api/exams/{exam_id}). 시험 폴더 전체(답안지 PDF·정답표·판독 기록·사진·결과)를 지움.
 
     매개변수:
@@ -524,12 +627,13 @@ def delete_exam(exam_id: str):
     예외:
         HTTP 404: 시험이 없거나 ID 형식이 틀림
     """
+    _require_exam(exam_id, user, access.OWNER)
     if not service.delete_exam(exam_id):
         raise HTTPException(404, "시험을 찾을 수 없습니다")
 
 
 @app.get("/api/exams/{exam_id}/sheets")
-def list_sheets(exam_id: str):
+def list_sheets(exam_id: str, user: dict = Depends(current_user)):
     """판독한 답안지 목록 (GET /api/exams/{exam_id}/sheets).
 
     저장된 답안지(판독 성공 + 정렬 실패)를 처리 시각 순으로 요약해서 보냄.
@@ -542,12 +646,12 @@ def list_sheets(exam_id: str):
     예외:
         HTTP 404: 시험이 없음
     """
-    _require_exam(exam_id)
+    _require_exam(exam_id, user)
     return [_sheet_summary(r) for r in gs.list_sheets(exam_id)]
 
 
 @app.get("/api/exams/{exam_id}/sheets/{sheet_id}")
-def get_sheet(exam_id: str, sheet_id: str):
+def get_sheet(exam_id: str, sheet_id: str, user: dict = Depends(current_user)):
     """답안지 한 장의 판독 결과 전체 (GET /api/exams/{exam_id}/sheets/{sheet_id}).
 
     요약과 달리 칸별 채움 비율(fill), 정렬 정보(align), 검수 기록(review)까지 모두 보냄 → 검수 화면용.
@@ -560,15 +664,19 @@ def get_sheet(exam_id: str, sheet_id: str):
     예외:
         HTTP 404: 시험 또는 답안지가 없음 (ID 형식이 틀린 경우 포함)
     """
-    _require_exam(exam_id)
+    _require_exam(exam_id, user)
     rec = gs.get_sheet(exam_id, sheet_id)
     if not rec:
         raise HTTPException(404, "답안지를 찾을 수 없습니다")
+    try:
+        rec["crops"] = gs.question_crops(exam_id)   # 검수 화면의 문항별 사진 조각 위치 (0~1 비율)
+    except Exception:
+        rec["crops"] = None                          # 양식을 못 읽어도 검수는 되게 (조각만 안 보임)
     return rec
 
 
 @app.get("/api/exams/{exam_id}/sheets/{sheet_id}/image")
-def get_sheet_image(exam_id: str, sheet_id: str):
+def get_sheet_image(exam_id: str, sheet_id: str, user: dict = Depends(current_user)):
     """답안지 한 장의 정렬 이미지 (GET /api/exams/{exam_id}/sheets/{sheet_id}/image). 검수 화면의 사진.
 
     P1 정렬 결과(200dpi 정면 이미지 JPEG)를 그대로 보냄 → 웹이 layout 좌표로 칸 위치를 겹쳐 그릴 수 있음.
@@ -581,7 +689,7 @@ def get_sheet_image(exam_id: str, sheet_id: str):
     예외:
         HTTP 404: 시험·답안지가 없거나 정렬 실패로 이미지가 없음
     """
-    _require_exam(exam_id)
+    _require_exam(exam_id, user)
     path = gs.aligned_image_path(exam_id, sheet_id)
     if not path:
         raise HTTPException(404, "정렬 이미지가 없습니다")
@@ -589,7 +697,7 @@ def get_sheet_image(exam_id: str, sheet_id: str):
 
 
 @app.patch("/api/exams/{exam_id}/sheets/{sheet_id}/review")
-def review_sheet(exam_id: str, sheet_id: str, req: ReviewRequest):
+def review_sheet(exam_id: str, sheet_id: str, req: ReviewRequest, user: dict = Depends(current_user)):
     """검수 수정 (PATCH /api/exams/{exam_id}/sheets/{sheet_id}/review).
 
     선생님이 확정한 답·학번을 답안지 기록의 review 칸에 저장함 (판독 원본 read 는 그대로 둠).
@@ -607,7 +715,13 @@ def review_sheet(exam_id: str, sheet_id: str, req: ReviewRequest):
         HTTP 404: 시험이 없거나, 답안지가 없거나, 판독에 성공한 답안지가 아님(LookupError)
         HTTP 422: 학번에 숫자 외 문자가 있는 등 입력값 오류(ValueError)
     """
-    _require_exam(exam_id)
+    exam = _require_exam(exam_id, user)
+    scope = set(access.my_scope(user, exam_id, exam["num_questions"])["review"])
+    if not scope:
+        raise HTTPException(403, "이 시험에서 검수할 수 있는 문항이 없습니다 (내 권한: 보기만)")
+    outside = sorted(int(q) for q in req.corrections if int(q) not in scope)
+    if outside:
+        raise HTTPException(403, f"내가 맡은 문항이 아니라서 고칠 수 없습니다: {', '.join(map(str, outside))}번")
     try:
         rec = gs.review_sheet(exam_id, sheet_id, req.corrections, req.student_id)
     except LookupError as e:
@@ -619,7 +733,7 @@ def review_sheet(exam_id: str, sheet_id: str, req: ReviewRequest):
 
 
 @app.get("/api/exams/{exam_id}/results")
-def get_results(exam_id: str):
+def get_results(exam_id: str, user: dict = Depends(current_user)):
     """채점 결과 JSON (GET /api/exams/{exam_id}/results) — 파이프라인 P4.
 
     요청할 때마다 저장된 판독 결과 + 최신 정답표 + 검수 수정값으로 다시 채점함.
@@ -634,16 +748,23 @@ def get_results(exam_id: str):
         HTTP 404: 시험이 없음
         HTTP 409: 정답표가 아직 없음 (정답표 입력부터 해야 함)
     """
-    _require_exam(exam_id)
+    _require_exam(exam_id, user)
     try:
         records = gs.grade_sheets(exam_id)
     except ValueError as e:
         raise HTTPException(409, str(e))
-    return [{k: v for k, v in r.items() if k != "read"} for r in records]
+    sections = access.get_access(exam_id).get("sections") or []
+    out = []
+    for r in records:
+        r = {k: v for k, v in r.items() if k != "read"}
+        if sections and r.get("items"):
+            r["sections"] = gs.section_scores(r["items"], sections)     # 과목별 소계
+        out.append(r)
+    return out
 
 
 @app.get("/api/exams/{exam_id}/results.xlsx")
-def get_results_xlsx(exam_id: str):
+def get_results_xlsx(exam_id: str, user: dict = Depends(current_user)):
     """채점 결과 엑셀 내려받기 (GET /api/exams/{exam_id}/results.xlsx) — 파이프라인 P4 + P5.
 
     다시 채점(P4)한 뒤 엑셀(P5)을 시험 폴더의 results.xlsx 로 저장하고 그 파일을 보냄.
@@ -657,12 +778,271 @@ def get_results_xlsx(exam_id: str):
         HTTP 404: 시험이 없음
         HTTP 409: 정답표가 아직 없음
     """
-    _require_exam(exam_id)
+    _require_exam(exam_id, user)
     try:
         path = gs.export_results(exam_id)
     except ValueError as e:
         raise HTTPException(409, str(e))
     return FileResponse(path, media_type=XLSX, filename=f"{exam_id}_채점결과.xlsx")
+
+
+# ---------------- 로그인·계정 (app/accounts.py) ----------------
+
+class LoginRequest(BaseModel):
+    """POST /api/auth/login 요청 본문. as_admin=True 면 로그인 화면 '관리자' 탭 → 관리자 계정만 통과."""
+    username: str
+    password: str
+    remember: bool = False      # 로그인 상태 유지 (30일). False면 12시간
+    as_admin: bool = False
+
+
+class SetupRequest(BaseModel):
+    """POST /api/auth/setup 요청 본문 (첫 관리자 계정)."""
+    username: str
+    name: str = ""
+    password: str
+
+
+class PasswordRequest(BaseModel):
+    """POST /api/auth/password 요청 본문 (내 비밀번호 바꾸기)."""
+    old_password: str
+    new_password: str
+
+
+def _login_response(response: Response, user: dict[str, Any], remember: bool) -> dict[str, Any]:
+    """로그인 쿠키를 응답에 붙이고 계정 정보를 돌려줌.
+
+    remember=False 면 쿠키에 유지 시간을 안 붙임 → 브라우저를 닫으면 로그아웃 (토큰 자체도 12시간 뒤 만료)
+    samesite="lax" → 다른 사이트에서 몰래 보낸 POST 요청에는 쿠키가 안 붙음 (CSRF 방지)
+    """
+    token, max_age = accounts.issue_token(user["username"], remember)
+    response.set_cookie(SESSION_COOKIE, token, max_age=max_age if remember else None,
+                        httponly=True, samesite="lax", path="/")
+    return user
+
+
+@app.get("/api/auth/status")
+def auth_status():
+    """로그인 전 화면용 (GET /api/auth/status). 계정이 하나도 없으면 needs_setup=True → '첫 관리자 만들기' 화면."""
+    return {"needs_setup": accounts.needs_setup()}
+
+
+@app.post("/api/auth/setup")
+def auth_setup(req: SetupRequest, response: Response):
+    """첫 관리자 계정 만들기 + 바로 로그인 (POST /api/auth/setup). 계정이 이미 있으면 409."""
+    try:
+        user = accounts.setup_first_admin(req.username, req.name, req.password)
+    except accounts.AccountError as e:
+        raise HTTPException(409 if "이미" in str(e) else 422, str(e))
+    return _login_response(response, user, False)
+
+
+@app.post("/api/auth/login")
+def auth_login(req: LoginRequest, response: Response):
+    """로그인 (POST /api/auth/login). 성공하면 쿠키 cm_session 을 붙여 계정 정보를 돌려줌.
+
+    예외:
+        HTTP 401: 아이디·비밀번호가 틀렸거나 사용 중지된 계정 (어느 쪽인지는 알려 주지 않음)
+        HTTP 403: '관리자' 탭으로 들어왔는데 관리자 계정이 아님
+    """
+    user = accounts.authenticate(req.username, req.password)
+    if not user:
+        raise HTTPException(401, "아이디 또는 비밀번호가 맞지 않습니다")
+    # 관리자 화면과 사용자 화면을 나눔 → 탭과 계정 역할이 맞아야 들어감
+    if req.as_admin and user["role"] != "admin":
+        raise HTTPException(403, "관리자 계정이 아닙니다. '사용자' 탭으로 로그인하세요")
+    if not req.as_admin and user["role"] == "admin":
+        raise HTTPException(403, "관리자 계정입니다. '관리자' 탭으로 로그인하세요")
+    return _login_response(response, user, req.remember)
+
+
+@app.post("/api/auth/logout", status_code=204)
+def auth_logout(response: Response):
+    """로그아웃 (POST /api/auth/logout). 쿠키를 지움."""
+    response.delete_cookie(SESSION_COOKIE, path="/")
+
+
+@app.get("/api/auth/me")
+def auth_me(user: dict = Depends(current_user)):
+    """지금 로그인한 계정 (GET /api/auth/me). 로그인 안 했으면 401 → 웹이 로그인 화면을 보여 줌."""
+    return user
+
+
+@app.post("/api/auth/password", status_code=204)
+def auth_password(req: PasswordRequest, response: Response, user: dict = Depends(current_user)):
+    """내 비밀번호 바꾸기 (POST /api/auth/password). 바꾸면 예전 토큰이 무효 → 새 쿠키를 바로 붙여 줌."""
+    try:
+        accounts.change_password(user["username"], req.old_password, req.new_password)
+    except accounts.AccountError as e:
+        raise HTTPException(422, str(e))
+    _login_response(response, user, False)
+
+
+@app.get("/api/users/directory")
+def users_directory(user: dict = Depends(current_user)):
+    """참여자 추가 화면용 사용 중인 계정 목록 (GET /api/users/directory). 아이디·이름·역할만."""
+    return [{"username": u["username"], "name": u["name"], "role": u["role"]}
+            for u in accounts.list_users() if u["active"]]
+
+
+# ---------------- 시험별 참여자·권한 (app/access.py) ----------------
+
+class AccessRequest(BaseModel):
+    """PUT /api/exams/{exam_id}/access 요청 본문.
+
+    예:
+        {"members": {"teacher02": "review", "ta01": "view"}}           ← 소유자·관리자
+        {"owner": "teacher03", "members": {...}}                       ← 담당 바꾸기는 관리자만
+    """
+    members: dict[str, Literal["manager", "view", "review"]] = Field(default_factory=dict)
+    owner: str | None = None
+    # 문항 범위(과목) 담당. None이면 그대로 둠. 예: [{"name": "물리", "from": 1, "to": 10, "assignees": ["teacher02"]}]
+    sections: list[dict[str, Any]] | None = None
+
+
+def _access_response(exam_id: str, user: dict[str, Any]) -> dict[str, Any]:
+    """참여자 권한 화면용 응답 (이름 붙임)."""
+    acc = access.get_access(exam_id)
+    names = {u["username"]: u["name"] for u in accounts.list_users()}
+    owner = acc.get("owner")
+    return {"exam_id": exam_id, "owner": owner, "owner_name": names.get(owner, owner) if owner else None,
+            "members": [{"username": u, "name": names.get(u, u), "level": lv,
+                         "level_label": access.LEVEL_LABEL[lv]} for u, lv in acc["members"].items()],
+            "my_level": access.LEVEL_NAME[access.level_for(user, exam_id, acc)],
+            "sections": [sec | {"assignee_names": [names.get(u, u) for u in sec["assignees"]]} for sec in acc["sections"]],
+            "my_scope": access.my_scope(user, exam_id, (service.get_exam(exam_id) or {}).get("num_questions", 0), acc),
+            "num_questions": (service.get_exam(exam_id) or {}).get("num_questions"),
+            "updated_at": acc.get("updated_at")}
+
+
+@app.get("/api/exams/{exam_id}/access")
+def get_exam_access(exam_id: str, user: dict = Depends(current_user)):
+    """시험의 소유자·참여자 (GET /api/exams/{exam_id}/access). 보기 권한 이상."""
+    _require_exam(exam_id, user)
+    return _access_response(exam_id, user)
+
+
+@app.put("/api/exams/{exam_id}/access")
+def put_exam_access(exam_id: str, req: AccessRequest, user: dict = Depends(current_user)):
+    """참여자 목록 저장 (PUT /api/exams/{exam_id}/access). 소유자·관리자만. owner 를 바꾸는 건 관리자만.
+
+    예외:
+        HTTP 403: 소유자가 아님 / 관리자가 아닌데 owner 를 바꾸려 함
+        HTTP 422: 없는 아이디, 사용 중지된 계정, 권한 값 오류
+    """
+    exam = _require_exam(exam_id, user, access.OWNER)
+    acc = access.get_access(exam_id)
+    owner_change = req.owner is not None and req.owner != acc.get("owner")
+    if owner_change and user["role"] != "admin":
+        raise HTTPException(403, "담당 선생님은 관리자만 바꿀 수 있습니다")
+    users = accounts.list_users()
+    active = {u["username"] for u in users if u["active"]}
+
+    for u in list(req.members) + ([req.owner] if owner_change and req.owner else []):
+        if u.lower() not in active:
+            raise HTTPException(422, f"없는 계정이거나 사용 중지된 계정입니다: {u}")
+    if owner_change:
+        access.set_owner(exam_id, req.owner or None)
+    try:
+        access.set_members(exam_id, dict(req.members))
+        if req.sections is not None:
+            access.set_sections(exam_id, req.sections, service.get_exam(exam_id)["num_questions"])
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    return _access_response(exam_id, user)
+
+
+# ---------------- 관리자 화면 (app/admin_service.py) ----------------
+
+class UserCreateRequest(BaseModel):
+    """POST /api/admin/users 요청 본문. password 를 비우면 임시 비밀번호를 만들어 돌려줌."""
+    username: str
+    name: str = ""
+    role: Literal["admin", "user"] = "user"
+    password: str | None = None
+
+
+class UserUpdateRequest(BaseModel):
+    """PATCH /api/admin/users/{username} 요청 본문. 보낸 항목만 바꿈."""
+    name: str | None = None
+    role: Literal["admin", "user"] | None = None
+    active: bool | None = None
+
+
+@app.get("/api/admin/exams")
+def admin_exams(admin: dict = Depends(require_admin)):
+    """지난 시험 관리: 모든 선생님의 시험 현황 (GET /api/admin/exams)."""
+    return admin_service.all_exam_overview()
+
+
+@app.get("/api/admin/exams.xlsx")
+def admin_exams_xlsx(admin: dict = Depends(require_admin)):
+    """지난 시험 목록 엑셀 내려받기 (GET /api/admin/exams.xlsx). 파일은 storage/admin_exam_list.xlsx 에 덮어씀."""
+    path = admin_service.export_exam_list(os.path.join(service.STORAGE_DIR, "admin_exam_list.xlsx"))
+    return FileResponse(path, media_type=XLSX, filename="CheckMate_시험목록.xlsx")
+
+
+@app.get("/api/admin/templates")
+def admin_templates(admin: dict = Depends(require_admin)):
+    """답안지 양식 목록 + 양식마다 쓰는 시험 수 (GET /api/admin/templates)."""
+    return admin_service.list_templates()
+
+
+@app.get("/api/admin/settings")
+def admin_get_settings(admin: dict = Depends(require_admin)):
+    """시스템 설정: 판독 기준값 지금 값·기본값·범위 (GET /api/admin/settings)."""
+    return admin_service.get_settings()
+
+
+@app.put("/api/admin/settings")
+def admin_put_settings(values: dict[str, Any], admin: dict = Depends(require_admin)):
+    """판독 기준값 저장 (PUT /api/admin/settings). 본문 예: {"expo_retake": 0.2}. 다음에 올리는 사진부터 적용."""
+    try:
+        return admin_service.update_settings(values, admin["username"])
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+
+
+@app.get("/api/admin/users")
+def admin_users(admin: dict = Depends(require_admin)):
+    """계정 목록 (GET /api/admin/users) + 계정마다 소유한 시험 수."""
+    owned: dict[str, int] = {}
+    for r in service.list_exams():
+        o = access.get_access(r["exam_id"]).get("owner")
+        if o:
+            owned[o] = owned.get(o, 0) + 1
+    return [u | {"n_owned": owned.get(u["username"], 0)} for u in accounts.list_users()]
+
+
+@app.post("/api/admin/users", status_code=201)
+def admin_create_user(req: UserCreateRequest, admin: dict = Depends(require_admin)):
+    """계정 만들기 (POST /api/admin/users). 임시 비밀번호를 만들었으면 temp_password 로 한 번만 보여 줌."""
+    try:
+        user, temp = accounts.create_user(req.username, req.name, req.role, req.password)
+    except accounts.AccountError as e:
+        raise HTTPException(409 if "이미" in str(e) else 422, str(e))
+    return user | {"temp_password": temp}
+
+
+@app.patch("/api/admin/users/{username}")
+def admin_update_user(username: str, req: UserUpdateRequest, admin: dict = Depends(require_admin)):
+    """계정 이름·역할·사용 여부 바꾸기 (PATCH /api/admin/users/{username})."""
+    try:
+        return accounts.update_user(username, name=req.name, role=req.role, active=req.active,
+                                    actor=admin["username"])
+    except LookupError as e:
+        raise HTTPException(404, str(e))
+    except accounts.AccountError as e:
+        raise HTTPException(422, str(e))
+
+
+@app.post("/api/admin/users/{username}/reset-password")
+def admin_reset_password(username: str, admin: dict = Depends(require_admin)):
+    """비밀번호 초기화 (POST /api/admin/users/{username}/reset-password) → 임시 비밀번호를 돌려줌."""
+    try:
+        return {"username": username, "temp_password": accounts.reset_password(username)}
+    except LookupError as e:
+        raise HTTPException(404, str(e))
 
 
 # 맨 마지막에: 나머지 경로는 정적 프론트엔드 (React 빌드 결과로 바꿔 끼워도 됨)

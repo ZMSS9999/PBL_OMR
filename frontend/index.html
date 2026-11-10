@@ -17,6 +17,13 @@
     #/overview  시험 현황 (다음 할 일 안내)    #/key      정답 입력
     #/upload    사진 올리기                    #/review   검수
     #/results   결과·엑셀
+    #/account   내 계정 (비밀번호 바꾸기)
+    관리자만:   #/admin/exams 지난 시험 관리 · #/admin/users 계정 관리 · #/admin/templates 답안지 양식 · #/admin/settings 시스템 설정
+
+  [로그인·권한]
+    - 처음 열면 GET /api/auth/me 로 로그인 여부 확인 → 안 했으면 로그인 화면(#login). 계정이 0개면 '첫 관리자 만들기'
+    - 로그인 토큰은 서버가 HttpOnly 쿠키로 줌 → 화면 코드는 토큰을 직접 다루지 않음
+    - 시험마다 내 권한(my_level: view / review / owner / admin)에 따라 버튼을 숨기거나 막음 (서버도 같은 검사를 함)
 
   [부르는 API] (모두 기존 backend/app/main.py 에 있는 것)
     GET  /api/sheet-options                      입력 범위
@@ -32,6 +39,12 @@
     GET  /api/exams/{id}/results(.xlsx)          채점 결과·엑셀
     DELETE /api/exams/{id}                       시험 삭제
     GET  /api/templates/{tid}/{ver}              양식 좌표 (정답 입력 화면을 답안지와 같은 열 배치로 그릴 때)
+    GET  /api/auth/status · POST /api/auth/setup · POST /api/auth/login · POST /api/auth/logout · GET /api/auth/me
+    POST /api/auth/password                      내 비밀번호 바꾸기
+    GET  /api/users/directory                    참여자로 추가할 수 있는 계정
+    GET|PUT /api/exams/{id}/access               시험 참여자 권한
+    GET  /api/admin/exams(.xlsx) · /api/admin/templates · GET|PUT /api/admin/settings
+    GET|POST /api/admin/users · PATCH /api/admin/users/{u} · POST /api/admin/users/{u}/reset-password
   [있으면 쓰는 API] (예전 백엔드에는 없음 → 없으면 대신 동작하게 만들어 둠)
     GET  /api/exams                              전체 시험 목록 → 없으면 이 브라우저에서 열어 본 시험만 기억해서 보여 줌
     GET  /api/exams/{id}/sheets/{sid}/image      정렬된 답안지 사진 → 없으면 검수 화면에서 사진 칸을 숨김
@@ -40,16 +53,17 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>CheckMate 관리</title>
+<title>CheckMate</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
 <style>
   /* 색·간격은 여기 변수에서만 정함 */
   :root {
-    --bg: #f4f6fa; --card: #fff; --ink: #1b2233; --muted: #6b7385; --line: #e3e7ee; --soft: #f7f9fc;
-    --side: #18233a; --side-ink: #c9d2e3; --side-active: #2b3a5c;
-    --accent: #2f6fed; --accent-soft: #e8f0fe; --accent-ink: #fff;
-    --ok: #1f9d55; --ok-soft: #e5f6ec; --warn: #c27c0e; --warn-soft: #fdf3e1;
-    --bad: #d93a3a; --bad-soft: #fde9e9; --gray-soft: #eef0f4;
+    /* 글자색은 검정(--ink) 또는 흰색만 씀 (회색 글자 X). 파스텔 배경 X → 상태 색은 진한 색 배경 + 흰 글자 (kim 11/7) */
+    --bg: #f4f6fa; --card: #fff; --ink: #1b2233; --muted: #1b2233; --line: #d5dae3; --soft: #f4f6fa;
+    --side: #18233a; --side-ink: #fff; --side-active: #2f6fed;
+    --accent: #2f6fed; --accent-soft: #fff; --accent-ink: #fff;
+    --ok: #1f8a4c; --ok-soft: #fff; --warn: #c26a00; --warn-soft: #fff;
+    --bad: #d93a3a; --bad-soft: #fff; --gray-soft: #e3e7ee; --sel: #dfe4ec;
     --radius: 12px;
   }
   * { box-sizing: border-box; }
@@ -64,13 +78,13 @@
   .side { background: var(--side); color: var(--side-ink); padding: 20px 14px; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
   .brand { display: flex; align-items: center; gap: 10px; color: #fff; font-weight: 700; font-size: 18px; padding: 0 8px 18px; }
   .brand .logo { width: 30px; height: 30px; border-radius: 8px; background: var(--accent); display: grid; place-items: center; font-size: 16px; }
-  .side h6 { margin: 18px 8px 6px; font-size: 12px; font-weight: 600; color: #8592ab; letter-spacing: .02em; }
+  .side h6 { margin: 18px 8px 6px; font-size: 12px; font-weight: 700; color: #fff; letter-spacing: .02em; }
   .nav a { display: flex; align-items: center; gap: 10px; padding: 10px 10px; border-radius: 8px; color: var(--side-ink);
            text-decoration: none; font-size: 15px; margin-bottom: 2px; }
   .nav a:hover { background: #223050; color: #fff; }
   .nav a.active { background: var(--side-active); color: #fff; font-weight: 600; }
   .nav a.disabled { opacity: .4; pointer-events: none; }
-  .nav .num { width: 24px; height: 24px; border-radius: 50%; border: 1.5px solid #52607c; display: grid; place-items: center;
+  .nav .num { width: 24px; height: 24px; border-radius: 50%; border: 1.5px solid #fff; display: grid; place-items: center;
               font-size: 12px; font-weight: 700; flex: none; }
   .nav .num.done { background: var(--ok); border-color: var(--ok); color: #fff; }
   .nav .badge { margin-left: auto; background: var(--warn); color: #fff; border-radius: 10px; padding: 0 7px; font-size: 12px; font-weight: 700; }
@@ -97,20 +111,21 @@
   .btn.primary:hover { filter: brightness(1.06); }
   .btn.big { padding: 12px 22px; font-size: 15px; }
   .btn.block { width: 100%; justify-content: center; }
-  .btn.del { color: var(--bad); } .btn.del:hover { border-color: var(--bad); background: var(--bad-soft); }
+  .btn.del { border-color: var(--bad); } .btn.del:hover { background: var(--bad); color: #fff; }
   .btn:disabled { opacity: .5; cursor: not-allowed; }
   .pill { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 13px; font-weight: 600; white-space: nowrap; }
-  .pill.ok { background: var(--ok-soft); color: var(--ok); }
-  .pill.warn { background: var(--warn-soft); color: var(--warn); }
-  .pill.bad { background: var(--bad-soft); color: var(--bad); }
-  .pill.gray { background: var(--gray-soft); color: var(--muted); }
+  .pill.ok { background: var(--ok); color: #fff; }
+  .pill.warn { background: var(--warn); color: #fff; }
+  .pill.bad { background: var(--bad); color: #fff; }
+  .pill.gray { background: #4b5465; color: #fff; }
   .muted { color: var(--muted); }
   .small { font-size: 13px; }
   .mono { font-family: ui-monospace, Consolas, monospace; font-size: 13px; }
   .msg { padding: 12px 14px; border-radius: 8px; font-size: 14px; margin-bottom: 16px; }
-  .msg.err { background: var(--bad-soft); color: var(--bad); }
-  .msg.info { background: var(--accent-soft); color: #1d4fb8; }
-  .msg.ok { background: var(--ok-soft); color: #17703f; }
+  .msg { background: #fff; color: var(--ink); border: 1px solid var(--line); border-left-width: 5px; }
+  .msg.err { border-color: var(--bad); }
+  .msg.info { border-color: var(--accent); }
+  .msg.ok { border-color: var(--ok); }
   .empty { text-align: center; color: var(--muted); padding: 48px 20px; }
   .empty b { display: block; color: var(--ink); font-size: 16px; margin-bottom: 6px; }
 
@@ -128,14 +143,14 @@
   .stat .k { color: var(--muted); font-size: 13px; }
   .stat .v { font-size: 26px; font-weight: 700; margin-top: 2px; font-variant-numeric: tabular-nums; }
   .stat .v small { font-size: 14px; color: var(--muted); font-weight: 500; }
-  .stat.warn .v { color: var(--warn); } .stat.bad .v { color: var(--bad); } .stat.ok .v { color: var(--ok); }
+  .stat.warn { border-left: 5px solid var(--warn); } .stat.bad { border-left: 5px solid var(--bad); } .stat.ok { border-left: 5px solid var(--ok); }
 
   /* 단계 안내 (시험 현황) */
   .steps { display: grid; gap: 10px; }
   .step { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
   .step .n { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; background: var(--gray-soft); color: var(--muted); flex: none; }
   .step.done .n { background: var(--ok); color: #fff; }
-  .step.next { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .step.next { border: 2px solid var(--accent); }
   .step.next .n { background: var(--accent); color: #fff; }
   .step .what b { display: block; }
   .step .what span { color: var(--muted); font-size: 13px; }
@@ -147,7 +162,7 @@
   .hint { color: var(--muted); font-size: 12px; font-weight: 400; margin-left: 4px; }
   input[type=text], input[type=number] { padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; font-family: inherit; background: #fff; }
   input[type=text] { width: 100%; }
-  input:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+  input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
   .qrow { display: flex; align-items: center; gap: 10px; }
   .qrow input[type=range] { flex: 1; accent-color: var(--accent); }
   .stepper { display: flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
@@ -157,52 +172,59 @@
   .seg { display: flex; gap: 6px; }
   .seg button { flex: 1; padding: 9px 0; border: 1px solid var(--line); border-radius: 8px; background: #fff; font-size: 14px; cursor: pointer; }
   .seg button[aria-pressed=true] { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
-  .summary { background: var(--accent-soft); color: #1d4fb8; border-radius: 8px; padding: 10px 12px; font-size: 13px; margin-bottom: 14px; }
+  .summary { background: #fff; color: var(--ink); border: 1px solid var(--line); border-left: 5px solid var(--accent); border-radius: 8px; padding: 10px 12px; font-size: 13px; margin-bottom: 14px; }
   iframe.pdf { width: 100%; height: 72vh; border: 1px solid var(--line); border-radius: 8px; background: #fafafa; }
 
   /* 선지 동그라미 버튼 (정답 입력·검수 공용) */
   .bubbles { display: flex; gap: 6px; }
   .bub { width: 34px; height: 34px; border-radius: 50%; border: 1.5px solid #c3cad6; background: #fff; font-weight: 700;
          font-size: 14px; color: var(--muted); cursor: pointer; display: grid; place-items: center; padding: 0; }
-  .bub:hover { border-color: var(--accent); color: var(--accent); }
+  .bub:hover { border-color: var(--accent); color: var(--ink); }
   .bub.on, .btn.nores.on { background: var(--ink); border-color: var(--ink); color: #fff; }
   .keygrid { display: grid; gap: 0 28px; overflow-x: auto; }
   .keygrid .keyrow { min-width: 300px; }
   .keyrow { display: flex; align-items: center; gap: 12px; padding: 8px 4px; border-bottom: 1px solid var(--line); }
   .keyrow .qn { width: 42px; font-weight: 700; font-variant-numeric: tabular-nums; }
-  .keyrow.missing .qn { color: var(--bad); }
+  .keyrow.missing .qn { background: var(--bad); color: #fff; border-radius: 6px; text-align: center; }
   .keyrow .pts { width: 64px; margin-left: auto; text-align: right; }
   .savebar { position: sticky; bottom: 0; background: rgba(255,255,255,.96); border-top: 1px solid var(--line);
              margin: 20px -22px -22px; padding: 14px 22px; display: flex; gap: 10px; align-items: center; border-radius: 0 0 var(--radius) var(--radius); }
 
   /* 사진 올리기 */
   .drop { display: block; border: 2px dashed #c3cad6; border-radius: var(--radius); padding: 40px 20px; text-align: center; background: var(--soft); cursor: pointer; }
-  .drop.over { border-color: var(--accent); background: var(--accent-soft); }
+  .drop.over { border-color: var(--accent); background: #fff; }
   .drop b { font-size: 16px; display: block; margin-bottom: 4px; }
   .progress { height: 8px; border-radius: 4px; background: var(--gray-soft); overflow: hidden; margin: 12px 0; }
   .progress > div { height: 100%; background: var(--accent); width: 0; transition: width .2s; }
 
   /* 검수 */
-  .review { display: grid; grid-template-columns: 300px 1fr; gap: 20px; align-items: start; }
-  .slist { max-height: 75vh; overflow-y: auto; padding: 0; }
+  /* 검수: 위 = 왼쪽 사진 · 오른쪽 검수, 아래 = 답안지 목록 (kim 11/8) */
+  .rv { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+  .rv-photo { position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow: auto; padding: 10px; }
+  .rv.land { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }   /* 가로 답안지는 사진 칸을 더 넓게 */
+  .pwrap { position: relative; overflow: hidden; border-radius: 6px; }
+  .pwrap .inner { position: absolute; }
+  .pwrap img { display: block; width: 100%; height: 100%; }
+  .ptools { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+  .pwrap .hl { position: absolute; border: 3px solid var(--warn); border-radius: 4px; pointer-events: none; }
+  .pwrap .hl.cur { border-color: var(--accent); box-shadow: 0 0 0 9999px rgba(0,0,0,.18); }
+  .qcard.cur { box-shadow: 0 0 0 2px var(--accent); }
+  .slist { padding: 0; margin-top: 20px; }
+  #slist { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); max-height: 40vh; overflow-y: auto; }
+  #slist .empty { grid-column: 1 / -1; }
   .slist .it { padding: 12px 16px; border-bottom: 1px solid var(--line); cursor: pointer; display: flex; gap: 10px; align-items: center; }
   .slist .it:hover { background: var(--soft); }
-  .slist .it.sel { background: var(--accent-soft); }
+  .slist .it.sel { background: var(--sel); box-shadow: inset 4px 0 0 var(--accent); }
   .slist .it .nm { font-weight: 600; font-size: 14px; }
   .slist .it .src { color: var(--muted); font-size: 12px; word-break: break-all; }
   .slist .it .pill { margin-left: auto; }
-  .filters { display: flex; gap: 6px; padding: 12px; border-bottom: 1px solid var(--line); }
+  .filters { display: flex; gap: 6px; padding: 12px; border-bottom: 1px solid var(--line); max-width: 420px; }
   .filters button { flex: 1; padding: 6px 0; border: 1px solid var(--line); background: #fff; border-radius: 6px; font-size: 13px; cursor: pointer; }
   .filters button[aria-pressed=true] { background: var(--ink); color: #fff; border-color: var(--ink); }
-  .qcard { display: flex; align-items: center; gap: 14px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line); margin-bottom: 8px; }
-  .qcard.flag { border-color: #f0c674; background: #fffbf2; }
+  .qcard { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line); margin-bottom: 8px; }
+  .qcard.flag { border: 2px solid var(--warn); background: #fff; }
   .qcard .qn { width: 46px; font-weight: 700; }
-  .qcard .why { font-size: 12px; color: var(--warn); width: 82px; }
-  .fills { display: flex; gap: 6px; }
-  .fill { width: 34px; text-align: center; font-size: 11px; color: var(--muted); }
-  .fill .bar { height: 30px; background: var(--gray-soft); border-radius: 4px; position: relative; overflow: hidden; margin-bottom: 2px; }
-  .fill .bar > i { position: absolute; left: 0; right: 0; bottom: 0; background: #9aa6bb; }
-  .fill .bar > i.hi { background: var(--ink); }
+  .qcard .why { font-size: 12px; color: var(--ink); font-weight: 700; width: 82px; }
   .sid { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
   .sid input { width: 160px; font-size: 16px; font-weight: 700; letter-spacing: .08em; }
   .photo { width: 100%; border: 1px solid var(--line); border-radius: 8px; }
@@ -218,19 +240,67 @@
            font-size: 14px; box-shadow: 0 6px 24px rgba(0,0,0,.18); opacity: 0; transform: translateY(10px); transition: .2s; pointer-events: none; }
   .toast.show { opacity: 1; transform: none; }
 
+
+  /* 로그인 화면 (통합 로그인 시안) */
+  .login { display: grid; place-items: center; min-height: 100vh; background: var(--bg); padding: 24px 16px; }
+  .login[hidden] { display: none; }
+  .login form { width: 100%; max-width: 420px; background: #fff; border: 1px solid var(--line); border-radius: var(--radius); padding: 36px 32px; }
+  .login h1 { margin: 0; font-size: 26px; }
+  .login .seg { margin: 26px 0 18px; }
+  .login input[type=text], .login input[type=password] { width: 100%; padding: 12px 14px; font-size: 15px; }
+  .login .opts { display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: var(--muted); margin: -6px 0 18px; }
+  .login .opts a { color: var(--muted); cursor: pointer; text-decoration: none; }
+  .login .opts label { display: flex; gap: 6px; align-items: center; cursor: pointer; }
+  .login .note { text-align: center; color: var(--muted); font-size: 13px; margin-top: 22px; }
+  input[type=password] { padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; font-family: inherit; background: #fff; width: 100%; }
+  select { padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; font-family: inherit; background: #fff; }
+
+  /* 왼쪽 메뉴 아래 내 계정 */
+  .me { margin: 22px 8px 0; padding: 12px; border-top: 1px solid #3b4a6c; font-size: 13px; }
+  .me b { color: #fff; display: block; font-size: 14px; }
+  .me .row { margin-top: 8px; gap: 6px; }
+  .me a { color: var(--side-ink); font-size: 13px; text-decoration: underline; cursor: pointer; }
+  .side .role { font-size: 12px; color: #fff; padding: 0 8px; margin: -12px 0 12px; }
+
+  /* 관리자: 시험 표 + 오른쪽 참여자 권한 패널 */
+  .admin2 { display: grid; grid-template-columns: 1fr 380px; gap: 20px; align-items: start; }
+  .t tr.sel td { background: var(--sel); } .t tr.sel td:first-child { box-shadow: inset 4px 0 0 var(--accent); }
+  .acc .who { display: flex; align-items: center; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+  .acc .who .nm { font-weight: 500; } .acc .who .id { color: var(--muted); font-size: 12px; }
+  .acc .who > :last-child { margin-left: auto; }
+  .pill.blue { background: var(--accent); color: #fff; }
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  .toolbar input[type=text] { max-width: 260px; }
+  .secret { font-family: ui-monospace, Consolas, monospace; font-size: 18px; font-weight: 700; letter-spacing: .05em; background: #fff;
+            padding: 4px 10px; border-radius: 6px; border: 2px solid var(--ink); user-select: all; }
+  .setrow { display: grid; grid-template-columns: 260px 1fr; gap: 14px; align-items: center; padding: 14px 0; border-bottom: 1px solid var(--line); }
+  .setrow .def { color: var(--muted); font-size: 12px; }
+  .setrow input[type=number] { width: 110px; }
+  .setrow.changed b::after { content: "바꿈"; background: var(--warn); color: #fff; font-weight: 700; font-size: 12px; padding: 1px 8px; border-radius: 10px; margin-left: 6px; }
+  .app[hidden] { display: none; }
+  .secrow { padding: 12px 0; border-bottom: 1px solid var(--line); }
+  .secrow input[type=number] { padding: 7px 8px; }
+  .chk { display: inline-flex; gap: 4px; align-items: center; margin-right: 10px; cursor: pointer; }
+  .keyrow.locked { background: var(--soft); }
+  .keyrow .sec { font-size: 12px; font-weight: 700; border: 1px solid var(--ink); border-radius: 10px; padding: 0 7px; }
+
   @media (max-width: 960px) {
     .app { grid-template-columns: 1fr; }
     .side { position: static; height: auto; }
-    .grid2, .review { grid-template-columns: 1fr; }
+    .grid2, .rv { grid-template-columns: 1fr; } .rv-photo { position: static; max-height: none; }
     #view, .top { padding-left: 16px; padding-right: 16px; }
     .qcard { flex-wrap: wrap; } .qcard .bubbles { margin-left: 0 !important; flex-wrap: wrap; }
     .keygrid { grid-template-columns: 1fr !important; } .keygrid > * { grid-row: auto !important; grid-column: auto !important; }
     .stats { grid-template-columns: 1fr 1fr; }
+    .login form { padding: 28px 20px; }
+    .admin2 { grid-template-columns: 1fr; } .setrow { grid-template-columns: 1fr; gap: 6px; }
   }
 </style>
 </head>
 <body>
-<div class="app">
+<!-- 로그인 화면. 로그인 전에는 이것만 보이고 .app 은 숨김 (showLogin) -->
+<div class="login" id="login" hidden></div>
+<div class="app" hidden>
   <!-- 왼쪽 메뉴. 내용은 renderSide() 가 채움 -->
   <aside class="side" id="side"></aside>
   <div class="mainwrap">
@@ -252,7 +322,7 @@ const LS_CURRENT = "checkmate.current";  // 마지막으로 고른 시험 ID
 
 // app: 지금 화면이 쓰는 값 모음
 //   exam 지금 고른 시험 정보, key 정답표(없으면 null), sheets 판독 목록(null = 아직 안 불러옴)
-const app = { exam: null, key: null, sheets: null, opts: null };
+const app = { exam: null, key: null, sheets: null, opts: null, user: null };   // user = 로그인한 계정
 
 // ---------------- 공통 도구 ----------------
 
@@ -264,9 +334,14 @@ function esc(s) {
 // 서버 호출. 실패하면 알아듣기 쉬운 문구의 Error 를 던짐 (err.status 에 HTTP 상태 번호)
 async function api(path, opt = {}) {
   let r;
-  try { r = await fetch(API_BASE + path, opt); }
+  try { r = await fetch(API_BASE + path, { credentials: "include", ...opt }); }   // 로그인 쿠키 함께 보냄
   catch (_) { throw Object.assign(new Error("서버에 연결할 수 없습니다. 터미널에서 uvicorn 이 실행 중인지 확인하세요."), { status: 0 }); }
   const data = await r.json().catch(() => null);
+  // 401 = 로그인이 끊김 (만료·로그아웃·계정 사용 중지) → 로그인 화면으로. 로그인 API 자체의 401 은 그대로 오류로 돌려줌
+  if (r.status === 401 && !path.startsWith("/api/auth/") && app.user) {
+    showLogin("로그인이 끊겼습니다. 다시 로그인해 주세요.");
+    throw Object.assign(new Error("로그인이 필요합니다"), { status: 401 });
+  }
   if (!r.ok) {
     const d = data && data.detail;
     const msg = Array.isArray(d) ? d.map(x => x.msg).join(", ") : (d || `서버 오류 (${r.status})`);
@@ -361,12 +436,21 @@ function renderSide() {
   const h = location.hash || "#/exams";
   const p = progress();
   const link = (href, inner, extra = "") => `<a href="${href}" class="${h === href ? "active" : ""} ${extra}">${inner}</a>`;
-  let html = `<div class="brand"><div class="logo">✓</div>CheckMate</div>
+  // 관리자 화면과 사용자 화면을 나눔: 관리자는 관리자 메뉴만, 사용자는 시험 메뉴만 보임
+  let html = isAdmin()
+    ? `<div class="brand"><div class="logo">✓</div>CheckMate</div>
     <nav class="nav">
-      ${link("#/exams", `<span class="num">≡</span>시험 목록`)}
-      ${link("#/new-blank", `<span class="num">+</span>새 시험 만들기`)}
+      ${link("#/admin/exams", `<span class="num">≡</span>지난 시험 관리`)}
+      ${link("#/admin/users", `<span class="num">◉</span>계정 관리`)}
+      ${link("#/admin/templates", `<span class="num">▢</span>답안지 양식`)}
+      ${link("#/admin/settings", `<span class="num">⚙</span>시스템 설정`)}
+    </nav>`
+    : `<div class="brand"><div class="logo">✓</div>CheckMate</div>
+    <nav class="nav">
+      ${link("#/exams", `<span class="num">≡</span>내 시험 목록`)}
+      ${canCreate() ? link("#/new-blank", `<span class="num">+</span>새 시험 만들기`) : ""}
     </nav>`;
-  if (app.exam) {
+  if (app.exam && !isAdmin()) {          // 관리자 화면에는 '지금 시험'을 보여 주지 않음
     html += `<h6>지금 시험</h6>
       <div class="cur"><b>${esc(app.exam.exam_name) || "(시험명 없음)"}</b>${[esc(app.exam.subject), `${app.exam.num_questions}문항`].filter(Boolean).join(" · ")}</div>
       <nav class="nav" style="margin-top:10px">
@@ -378,13 +462,18 @@ function renderSide() {
         }).join("")}
       </nav>`;
   }
+  if (app.user) {
+    html += `<div class="me"><b>${esc(app.user.name)}</b>${esc(app.user.username)} · ${esc(app.user.role_label)}
+      <div class="row"><a href="#/account">내 계정</a><a id="logoutBtn">로그아웃</a></div></div>`;
+  }
   $("side").innerHTML = html;
+  if ($("logoutBtn")) $("logoutBtn").onclick = logout;
 }
 
 // 맨 위 제목줄
 function setTop(title, sub = "", actions = "") {
   $("title").textContent = title;
-  $("subtitle").innerHTML = sub;
+  $("subtitle").innerHTML = sub; $("subtitle").style.display = sub ? "" : "none";
   $("topActions").innerHTML = actions;
   document.title = `${title} · CheckMate`;
 }
@@ -394,6 +483,15 @@ function setTop(title, sub = "", actions = "") {
 const PAGES = {
   "#/exams": pageExams, "#/new": pageNew, "#/new-blank": pageNew, "#/overview": pageOverview,
   "#/key": pageKey, "#/upload": pageUpload, "#/review": pageReview, "#/results": pageResults,
+  "#/account": pageAccount,
+  "#/admin/exams": pageAdminExams, "#/admin/users": pageAdminUsers,
+  "#/admin/templates": pageAdminTemplates, "#/admin/settings": pageAdminSettings,
+};
+// 시험 권한이 모자라면 페이지 위에 안내를 붙이는 페이지 (필요 권한, 안내 문구)
+const PAGE_NEED = {
+  "#/key": [() => myScope().key.length > 0, "보기 전용"],
+  "#/upload": ["review", "보기 전용"],
+  "#/review": [() => myScope().review.length > 0, "보기 전용"],
 };
 // 시험을 골라야 열 수 있는 페이지 (#/new 는 시험이 있으면 그 답안지를 보여 주고, 없으면 새로 만듦)
 const NEED_EXAM = ["#/overview", "#/key", "#/upload", "#/review", "#/results"];
@@ -401,11 +499,24 @@ const NEED_EXAM = ["#/overview", "#/key", "#/upload", "#/review", "#/results"];
 async function route() {
   let h = location.hash || "#/exams";
   if (!PAGES[h]) h = "#/exams";
+  if (!app.user) return;                                                       // 로그인 전 (로그인 화면이 떠 있음)
+  if (h.startsWith("#/admin/") && !isAdmin()) { location.hash = "#/exams"; return; }
+  // 관리자는 사용자용 시험 목록·새 시험 화면 대신 '지난 시험 관리'를 씀 (시험은 거기서 열기)
+  // 관리자는 시험 작업 화면(정답 입력·검수 등)을 쓰지 않음 → 관리자 화면으로 돌려보냄
+  if (isAdmin() && !h.startsWith("#/admin/") && h !== "#/account") { app.exam = null; location.hash = "#/admin/exams"; return; }
   if (NEED_EXAM.includes(h) && !app.exam) { location.hash = "#/exams"; return; }
   renderSide();
   $("view").innerHTML = `<div class="empty">불러오는 중…</div>`;
-  try { await PAGES[h](); }
-  catch (e) { $("view").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
+  try {
+    await PAGES[h]();
+    const need = PAGE_NEED[h];
+    if (need && app.exam && !(typeof need[0] === "function" ? need[0]() : can(need[0]))) {
+      $("view").insertAdjacentHTML("afterbegin", `<div class="msg info">${need[1]} (내 권한: ${LV_LABEL[app.exam.my_level] || "-"})</div>`);
+      // 사진 올리기는 버튼을 눌러도 서버가 막으므로 올리는 칸 자체를 숨김
+      if (h === "#/upload" && $("drop")) $("drop").closest(".card").style.display = "none";
+    }
+  }
+  catch (e) { if (e.status !== 401) $("view").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
   renderSide();
   window.scrollTo(0, 0);
 }
@@ -414,8 +525,8 @@ window.addEventListener("hashchange", route);
 // ---------------- 시험 목록 ----------------
 
 async function pageExams() {
-  setTop("시험 목록", "시험을 고르면 정답 입력·사진 올리기·결과 확인을 이어서 할 수 있습니다.",
-    `<a class="btn primary" href="#/new-blank">+ 새 시험 만들기</a>`);
+  setTop("내 시험 목록", "",
+    canCreate() ? `<a class="btn primary" href="#/new-blank">+ 새 시험 만들기</a>` : "");
   // 1순위: 서버의 전체 시험 목록 (GET /api/exams). 아직 없으면 이 브라우저가 기억한 시험만 하나씩 읽어 옴
   let exams, fromServer = true;
   try { exams = await api("/api/exams"); if (!Array.isArray(exams)) throw new Error(); }
@@ -433,21 +544,20 @@ async function pageExams() {
       <td>${oriText(e.orientation)}</td>
       <td>${fmtDate(e.created_at)}</td>
       <td class="mono">${esc(e.exam_id)}</td>
+      <td>${e.owner ? esc(e.owner_name) : `<span class="muted">없음</span>`}<div class="muted small">${LV_LABEL[e.my_level] || ""}</div></td>
       <td style="text-align:right;white-space:nowrap"><button class="btn">열기</button>
-        <button class="btn del" data-del="${esc(e.exam_id)}" data-name="${esc(e.exam_name)}" title="시험 삭제">삭제</button></td>
+        ${can("owner", e) ? `<button class="btn del" data-del="${esc(e.exam_id)}" data-name="${esc(e.exam_name)}" title="시험 삭제">삭제</button>` : ""}</td>
     </tr>`).join("");
 
   $("view").innerHTML = `
     <div class="card">
       ${exams.length ? `<div class="tablewrap"><table class="t">
-        <thead><tr><th>시험</th><th>문항</th><th>방향</th><th>만든 날짜</th><th>시험 ID</th><th></th></tr></thead>
+        <thead><tr><th>시험</th><th>문항</th><th>방향</th><th>만든 날짜</th><th>시험 ID</th><th>만든 사람 · 내 역할</th><th></th></tr></thead>
         <tbody>${rows}</tbody></table></div>`
-      : `<div class="empty"><b>아직 시험이 없습니다</b>왼쪽 위 ‘새 시험 만들기’로 답안지를 만들거나, 아래에 시험 ID를 넣어 예전 시험을 불러오세요.</div>`}
+      : `<div class="empty"><b>아직 시험이 없습니다</b></div>`}
     </div>
     <div class="card">
       <h2>시험 ID로 불러오기</h2>
-      <p class="desc">${fromServer ? "목록에 없는 시험은" : "이 브라우저에서 처음 여는 시험은"} 시험 ID(예: EX-20261014-DE1319)를 넣어 불러올 수 있습니다.
-        시험 ID는 backend/storage/exams 폴더 이름과 같습니다.</p>
       <form class="row" id="loadForm">
         <input type="text" id="loadId" placeholder="EX-20261014-XXXXXX" style="max-width:280px">
         <button class="btn primary" type="submit">불러오기</button>
@@ -486,7 +596,7 @@ async function deleteExam(examId, name) {
   } catch (_) {}
   if (app.exam && app.exam.exam_id === examId) { app.exam = null; app.key = null; app.sheets = null; }
   toast("시험을 삭제했습니다");
-  if (location.hash === "#/exams") route(); else location.hash = "#/exams";
+  if (location.hash === "#/exams" || location.hash.startsWith("#/admin/")) route(); else location.hash = "#/exams";
 }
 
 // ---------------- 1. 답안지 만들기 ----------------
@@ -494,9 +604,10 @@ async function deleteExam(examId, name) {
 async function pageNew() {
   // #/new-blank 로 오면 '지금 시험'을 비우고 새로 만들기. #/new 는 지금 시험이 있으면 그 답안지를 보여 줌
   if (location.hash === "#/new-blank") { app.exam = null; app.key = null; app.sheets = null; renderSide(); }
+  if (!app.exam && !canCreate()) { $("view").innerHTML = `<div class="msg info">시험을 만들 수 없는 계정입니다.</div>`; setTop("새 시험 만들기"); return; }
   if (app.exam) return showSheet();
 
-  setTop("새 시험 만들기", "문항 수와 선지 수를 고르면 인쇄용 A4 답안지 PDF를 만듭니다.");
+  setTop("새 시험 만들기");
   if (!app.opts) {
     app.opts = await api("/api/sheet-options").catch(() => ({
       num_questions: { min: 5, max: 45, default: 20 }, num_choices: { min: 2, max: 5, default: 5 },
@@ -509,9 +620,9 @@ async function pageNew() {
   $("view").innerHTML = `
     <div class="grid2">
       <form class="card" id="form" novalidate>
-        <div class="field"><label for="exam_name">시험명 <span class="hint">선택 · QR코드에만 저장</span></label>
+        <div class="field"><label for="exam_name">시험명</label>
           <input type="text" id="exam_name" maxlength="30" placeholder="예) 2026학년도 2학기 중간고사"></div>
-        <div class="field"><label for="subject">과목명 <span class="hint">선택 · QR코드에만 저장</span></label>
+        <div class="field"><label for="subject">과목명</label>
           <input type="text" id="subject" maxlength="20" placeholder="예) 컴퓨터비전"></div>
         <div class="field"><span class="label">객관식 문항 수 <span class="hint">${o.num_questions.min}~${o.num_questions.max}</span></span>
           <div class="qrow">
@@ -526,7 +637,7 @@ async function pageNew() {
         <button class="btn primary big block" id="submit" type="submit">답안지 PDF 만들기</button>
         <div class="msg err" id="err" style="display:none;margin:12px 0 0"></div>
       </form>
-      <section class="card"><div class="empty"><b>미리보기</b>왼쪽에서 값을 고르고 ‘답안지 PDF 만들기’를 누르면 여기에 답안지가 나옵니다.</div></section>
+      <section class="card"><div class="empty"><b>미리보기</b></div></section>
     </div>`;
 
   const seg = (el, items, k) => {
@@ -575,7 +686,7 @@ async function pageNew() {
 // 이미 만든 시험의 답안지 PDF 보기
 function showSheet() {
   const e = app.exam, pdf = `${API_BASE}${e.pdf_url}`;
-  setTop("1. 답안지", `${esc(e.exam_name) || "(시험명 없음)"} · 인쇄해서 학생들에게 나눠 주세요.`,
+  setTop("1. 답안지", `${esc(e.exam_name) || "(시험명 없음)"}`,
     `<a class="btn" href="${pdf}?download=true">PDF 내려받기</a><a class="btn primary" href="#/key">다음: 정답 입력 →</a>`);
   $("view").innerHTML = `
     <div class="grid2">
@@ -589,8 +700,6 @@ function showSheet() {
           <tr><td class="muted">시험 ID</td><td class="mono">${esc(e.exam_id)}</td></tr>
           <tr><td class="muted">양식</td><td class="mono">${esc(e.template_id)} v${esc(e.template_version)}</td></tr>
         </tbody></table>
-        <p class="muted small" style="margin:14px 0 0">시험명·과목명은 답안지에 인쇄되지 않고 QR코드에만 들어갑니다.
-          다른 시험 답안지 사진을 잘못 올리면 이 QR코드로 걸러 냅니다.</p>
       </div>
       <div class="card"><iframe class="pdf" src="${pdf}" title="답안지 미리보기"></iframe></div>
     </div>`;
@@ -604,11 +713,11 @@ async function pageOverview() {
   setTop(e.exam_name || "(시험명 없음)", `${e.subject ? esc(e.subject) + " · " : ""}객관식 ${e.num_questions}문항 · ${e.num_choices}지선다 · <span class="mono">${esc(e.exam_id)}</span>`);
 
   const steps = [
-    { n: 1, done: true, hash: "#/new", t: "답안지 만들기", d: "답안지 PDF를 인쇄해서 나눠 줍니다." },
-    { n: 2, done: p.key, hash: "#/key", t: "정답 입력", d: p.key ? "정답표가 저장되어 있습니다." : "문항별 정답과 배점을 넣습니다." },
-    { n: 3, done: p.upload, hash: "#/upload", t: "사진 올리기", d: p.upload ? `${p.nSheets}장 올렸습니다.` : "학생 답안지를 찍은 사진을 올립니다." },
-    { n: 4, done: p.review, hash: "#/review", t: "검수", d: !p.upload ? "사진을 올리면 기계가 헷갈린 칸만 골라 보여 줍니다." : p.nReview ? `확인이 필요한 답안지 ${p.nReview}장` : "확인할 답안지가 없습니다." },
-    { n: 5, done: false, hash: "#/results", t: "결과·엑셀", d: "점수표를 보고 엑셀로 내려받습니다." },
+    { n: 1, done: true, hash: "#/new", t: "답안지 만들기", d: "" },
+    { n: 2, done: p.key, hash: "#/key", t: "정답 입력", d: "" },
+    { n: 3, done: p.upload, hash: "#/upload", t: "사진 올리기", d: p.upload ? `${p.nSheets}장` : "" },
+    { n: 4, done: p.review, hash: "#/review", t: "검수", d: p.upload && p.nReview ? `검수 대기 ${p.nReview}장` : "" },
+    { n: 5, done: false, hash: "#/results", t: "결과·엑셀", d: "" },
   ];
   // 다음 할 일 = 아직 안 끝난 첫 단계
   const next = steps.find(s => !s.done);
@@ -622,21 +731,22 @@ async function pageOverview() {
     </div>
     <div class="card">
       <h2>진행 순서</h2>
-      <p class="desc">파란 테두리가 다음에 할 일입니다. 어느 단계든 눌러서 다시 볼 수 있습니다.</p>
       <div class="steps">
         ${steps.map(s => `
           <div class="step ${s.done ? "done" : ""} ${s === next ? "next" : ""}">
             <div class="n">${s.done ? "✓" : s.n}</div>
-            <div class="what"><b>${s.t}</b><span>${s.d}</span></div>
+            <div class="what"><b>${s.t}</b>${s.d ? `<span>${s.d}</span>` : ""}</div>
             <a class="btn ${s === next ? "primary" : ""} go" href="${s.hash}">${s === next ? "시작하기" : "열기"}</a>
           </div>`).join("")}
       </div>
     </div>
-    <div class="card row">
-      <div><h2>시험 삭제</h2><p class="desc" style="margin:0">이 시험의 답안지·정답표·사진·결과를 모두 지웁니다. 되돌릴 수 없습니다.</p></div>
+    <div class="card" id="accPanel" style="max-width:560px"></div>
+    ${can("owner") ? `<div class="card row">
+      <div><h2 style="margin:0">시험 삭제</h2></div>
       <button class="btn del" id="delExam" style="margin-left:auto">시험 삭제</button>
-    </div>`;
-  $("delExam").onclick = () => deleteExam(e.exam_id, e.exam_name);
+    </div>` : ""}`;
+  if ($("delExam")) $("delExam").onclick = () => deleteExam(e.exam_id, e.exam_name);
+  renderAccessPanel($("accPanel"), e.exam_id, e.exam_name, () => route()).catch(ex => $("accPanel").innerHTML = `<div class="msg err">${esc(ex.message)}</div>`);
 }
 
 // ---------------- 2. 정답 입력 ----------------
@@ -644,6 +754,9 @@ async function pageOverview() {
 async function pageKey() {
   const e = app.exam, N = e.num_questions, C = e.num_choices;
   app.key = await api(`/api/exams/${e.exam_id}/answer-key`).catch(() => null);
+  // 지금까지 입력된 정답 (문항 범위별로 나눠 넣는 중이면 아직 안 찬 정답표). 내 범위 밖 문항은 잠금
+  const draft = await api(`/api/exams/${e.exam_id}/answer-key/draft`).catch(() => null);
+  const scope = myScope(), mine = new Set(scope.key);
   // 답안지와 같은 배치로 보여 주기: 양식 좌표의 문항별 열·행(column, row)을 그대로 씀
   //   예) 30문항 = 2열 → 첫 줄이 1번, 16번 (한 열 15문항). 양식을 못 읽으면 한 열 15문항으로 계산
   const lay = await api(e.template_url).catch(() => null);
@@ -652,18 +765,19 @@ async function pageKey() {
   const perCol = lay?.mcq?.rows_per_column || 15;
   for (let q = 1; q <= N; q++) if (!pos[q]) pos[q] = { col: Math.floor((q - 1) / perCol), row: (q - 1) % perCol };
   const nCols = Math.max(...Object.values(pos).map(p => p.col)) + 1;
-  setTop("2. 정답 입력", "답안지와 같은 배치입니다. 문항마다 정답 번호를 누르세요. 정답이 여러 개면 여러 개를 누르면 됩니다.",
-    `<a class="btn" href="${API_BASE}/api/exams/${e.exam_id}/answer-key/template">엑셀 양식 내려받기</a>
-     <label class="btn" for="keyFile" style="cursor:pointer">엑셀로 올리기</label>`);
+  setTop("2. 정답 입력", "",
+    can("owner") ? `<a class="btn" href="${API_BASE}/api/exams/${e.exam_id}/answer-key/template">엑셀 양식 내려받기</a>
+     <label class="btn" for="keyFile" style="cursor:pointer">엑셀로 올리기</label>` : "");
 
   // ans[q] = 정답 목록, pts[q] = 배점 (빈칸 = 기본 배점)
   const ans = {}, pts = {};
   let defPts = 1;
-  if (app.key) {
-    for (const [q, a] of Object.entries(app.key.answers || {})) ans[q] = [...a];
+  const src = app.key || draft;
+  if (src) {
+    for (const [q, a] of Object.entries(src.answers || {})) ans[q] = [...a];
     // 저장된 배점이 기본 배점과 다를 때만 칸에 표시
-    defPts = app.key.default_points ?? 1;
-    for (const [q, v] of Object.entries(app.key.points || {})) if (v !== defPts) pts[q] = v;
+    defPts = src.default_points ?? 1;
+    for (const [q, v] of Object.entries(src.points || {})) if (v !== defPts) pts[q] = v;
   }
 
   $("view").innerHTML = `
@@ -671,11 +785,12 @@ async function pageKey() {
       <div class="row" style="margin-bottom:6px">
         <h2 style="margin:0">정답표</h2>
         <span class="pill gray" id="cnt"></span>
+        <span class="pill blue" id="totalPts"></span>
         <span style="margin-left:auto" class="row small">기본 배점
-          <input type="number" id="defPts" min="0" step="0.5" value="${defPts}" style="width:72px">점
-          <span class="muted">· 배점이 다른 문항만 오른쪽 칸에 적으세요</span></span>
+          <input type="number" id="defPts" min="0" step="0.5" value="${defPts}" style="width:72px" ${scope.all ? "" : "disabled"}>점</span>
       </div>
-      ${app.key ? `<div class="msg ok" style="margin-top:12px">저장된 정답표를 불러왔습니다. 고친 뒤 저장하면 새 값으로 바뀝니다.</div>` : ""}
+      ${!scope.all && scope.key.length ? `<div class="msg info" style="margin-top:12px">내가 맡은 문항: ${esc(scope.sections.join(", "))} (${scope.key[0]}~${scope.key[scope.key.length - 1]}번)</div>` : ""}
+      ${!app.key && draft && Object.keys(draft.answers || {}).length ? `<div class="msg info" style="margin-top:12px">빈 문항 ${draft.missing.length}개</div>` : ""}
       <input type="file" id="keyFile" accept=".xlsx,.json" hidden>
       <div class="keygrid" id="keygrid"></div>
       <div class="savebar">
@@ -684,27 +799,36 @@ async function pageKey() {
       </div>
     </div>`;
 
+  // 총점(만점) = 문항별 배점 합. 배점 칸이 비어 있으면 기본 배점
+  function drawTotal() {
+    const d = Number($("defPts").value || 1);
+    let t = 0; for (let q = 1; q <= N; q++) t += pts[q] ?? d;
+    $("totalPts").textContent = `총점 ${fmtNum(t)}점`;
+  }
   function draw() {
     let html = "";
     for (let q = 1; q <= N; q++) {
       const a = ans[q] || [];
-      html += `<div class="keyrow ${a.length ? "" : "missing"}" style="grid-column:${pos[q].col + 1};grid-row:${pos[q].row + 1}">
+      const lock = !mine.has(q), sec = sectionOf(q);
+      html += `<div class="keyrow ${a.length ? "" : "missing"} ${lock ? "locked" : ""}" style="grid-column:${pos[q].col + 1};grid-row:${pos[q].row + 1}" title="${lock ? "내가 맡은 문항이 아닙니다" : ""}">
         <span class="qn">${q}번</span>
         <div class="bubbles">${Array.from({ length: C }, (_, i) =>
-          `<button type="button" class="bub ${a.includes(i + 1) ? "on" : ""}" data-q="${q}" data-c="${i + 1}">${i + 1}</button>`).join("")}</div>
-        <input type="number" class="pts" min="0" step="0.5" data-q="${q}" value="${pts[q] ?? ""}" placeholder="${$("defPts").value}" aria-label="${q}번 배점">
+          `<button type="button" class="bub ${a.includes(i + 1) ? "on" : ""}" data-q="${q}" data-c="${i + 1}" ${lock ? "disabled" : ""}>${i + 1}</button>`).join("")}</div>
+        ${sec ? `<span class="sec">${esc(sec)}</span>` : ""}
+        <input type="number" class="pts" min="0" step="0.5" data-q="${q}" value="${pts[q] ?? ""}" placeholder="${$("defPts").value}" aria-label="${q}번 배점" ${lock ? "disabled" : ""}>
       </div>`;
     }
     $("keygrid").innerHTML = html;
     $("keygrid").style.gridTemplateColumns = `repeat(${nCols}, minmax(300px, 1fr))`;
     const filled = Object.values(ans).filter(a => a.length).length;
     $("cnt").textContent = `${filled} / ${N} 문항 입력`;
+    drawTotal();
     $("cnt").className = `pill ${filled === N ? "ok" : "gray"}`;
   }
   draw();
 
   $("keygrid").onclick = (ev) => {
-    const b = ev.target.closest(".bub"); if (!b) return;
+    const b = ev.target.closest(".bub"); if (!b || b.disabled) return;
     const q = b.dataset.q, c = Number(b.dataset.c);
     const a = ans[q] || [];
     ans[q] = a.includes(c) ? a.filter(x => x !== c) : [...a, c].sort();
@@ -713,20 +837,25 @@ async function pageKey() {
   $("keygrid").onchange = (ev) => {
     const i = ev.target.closest("input.pts"); if (!i) return;
     if (i.value === "") delete pts[i.dataset.q]; else pts[i.dataset.q] = Number(i.value);
+    drawTotal();
   };
   $("defPts").onchange = draw;
 
   $("saveKey").onclick = async () => {
     const err = $("keyErr"); err.style.display = "none";
-    const missing = []; for (let q = 1; q <= N; q++) if (!(ans[q] || []).length) missing.push(q);
-    if (missing.length) { err.style.display = ""; err.textContent = `정답이 비어 있는 문항: ${missing.join(", ")}번`; return; }
-    const answers = {}; for (let q = 1; q <= N; q++) answers[q] = ans[q];
+    // 내가 맡은 문항만 보냄 (서버가 나머지 문항과 합침). 모든 문항이 차면 정답표 완성
+    const myMissing = scope.key.filter(q => !(ans[q] || []).length);
+    if (myMissing.length) { err.style.display = ""; err.textContent = `정답이 비어 있는 문항: ${myMissing.join(", ")}번`; return; }
+    const answers = {}, points = {};
+    for (const q of scope.key) { answers[q] = ans[q]; points[q] = pts[q] ?? ""; }
+    const body = { answers, points };
+    if (scope.all) body.default_points = Number($("defPts").value || 1);
     try {
-      app.key = await api(`/api/exams/${e.exam_id}/answer-key`,
-        jsonBody("PUT", { answers, points: pts, default_points: Number($("defPts").value || 1) }));
-      toast("정답표를 저장했습니다");
+      const r = await api(`/api/exams/${e.exam_id}/answer-key/draft`, jsonBody("PATCH", body));
+      app.key = r.complete ? await api(`/api/exams/${e.exam_id}/answer-key`).catch(() => null) : null;
       renderSide();
-      location.hash = "#/upload";
+      if (r.complete) { toast("정답표를 저장했습니다"); location.hash = "#/upload"; }
+      else { toast(`저장했습니다. 다른 선생님이 넣을 문항 ${r.missing.length}개가 남았습니다`); route(); }
     } catch (ex) { err.style.display = ""; err.textContent = ex.message; }
   };
 
@@ -744,7 +873,7 @@ async function pageKey() {
 // ---------------- 3. 사진 올리기 ----------------
 
 const STATUS_TEXT = {
-  read: ["ok", "판독 완료"], align_failed: ["bad", "재촬영 필요"], wrong_exam: ["bad", "다른 시험지"], rejected: ["bad", "올릴 수 없는 파일"],
+  read: ["ok", "판독 완료"], align_failed: ["bad", "재촬영 필요"], too_bright: ["bad", "재촬영 필요 (밝음·반사)"], too_blurry: ["bad", "재촬영 필요 (흐림)"], wrong_exam: ["bad", "다른 시험지"], rejected: ["bad", "올릴 수 없는 파일"],
 };
 function sheetPill(s) {
   if (needsReview(s)) return `<span class="pill warn">검수 필요</span>`;
@@ -755,14 +884,13 @@ function sheetPill(s) {
 async function pageUpload() {
   const e = app.exam;
   await refreshExamState();
-  setTop("3. 사진 올리기", "학생 답안지를 찍은 사진(jpg, png)을 한 번에 여러 장 올릴 수 있습니다.",
+  setTop("3. 사진 올리기", "",
     app.sheets.length ? `<a class="btn primary" href="#/review">다음: 검수 →</a>` : "");
 
   $("view").innerHTML = `
     <div class="card">
       <label class="drop" id="drop" for="photos">
         <b>여기로 사진을 끌어 놓거나 눌러서 고르세요</b>
-        <span class="muted small">네 모서리 표시(검은 네모)와 QR코드가 모두 보이게 찍어 주세요 · 한 장 20MB까지</span>
       </label>
       <input type="file" id="photos" accept="image/*" multiple hidden>
       <div id="upState"></div>
@@ -802,7 +930,7 @@ async function pageUpload() {
       ${bad.length ? `<br>판독하지 못한 사진: ${bad.map(b => `${esc(b.source)} (${esc(b.error || STATUS_TEXT[b.status]?.[1])})`).join(", ")}` : ""}</div>`;
     $("photos").value = "";
     drawSheetTable(); renderSide();
-    setTop("3. 사진 올리기", "학생 답안지를 찍은 사진(jpg, png)을 한 번에 여러 장 올릴 수 있습니다.",
+    setTop("3. 사진 올리기", "",
       `<a class="btn primary" href="#/review">다음: 검수 →</a>`);
   }
 }
@@ -818,7 +946,7 @@ function drawSheetTable() {
       <td>${fmtDate(s.processed_at)}</td>
       <td style="text-align:right">${s.status === "read" ? `<a class="btn" href="#/review" data-sid="${s.sheet_id}">보기</a>` : ""}</td>
     </tr>`).join("")}</tbody></table></div>`
-    : `<div class="empty"><b>아직 올린 사진이 없습니다</b>위 칸에 사진을 올리면 바로 판독합니다.</div>`;
+    : `<div class="empty"><b>아직 올린 사진이 없습니다</b></div>`;
   for (const a of document.querySelectorAll("a[data-sid]")) a.onclick = () => { app.reviewSel = a.dataset.sid; };
 }
 
@@ -829,12 +957,12 @@ const READ_WHY = { ambiguous: "흐린 표시", multi: "여러 개 표시", blank
 async function pageReview() {
   const e = app.exam;
   await refreshExamState();
-  setTop("4. 검수", "기계가 확실히 읽지 못한 칸만 노란색으로 표시했습니다. 사진(또는 칠한 정도)을 보고 맞는 답을 고른 뒤 ‘확인 완료’를 누르세요.",
+  setTop("4. 검수", "",
     `<a class="btn primary" href="#/results">다음: 결과 보기 →</a>`);
 
   const readSheets = app.sheets.filter(s => s.status === "read");
   if (!app.sheets.length) {
-    $("view").innerHTML = `<div class="card"><div class="empty"><b>아직 올린 사진이 없습니다</b><a href="#/upload">사진 올리기</a>부터 해 주세요.</div></div>`;
+    $("view").innerHTML = `<div class="card"><div class="empty"><b>아직 올린 사진이 없습니다</b></div></div>`;
     return;
   }
   // 목록 필터: need(검수 필요) / all(전체) / bad(재촬영)
@@ -842,12 +970,10 @@ async function pageReview() {
   let sel = app.reviewSel || null;
 
   $("view").innerHTML = `
-    <div class="review">
-      <div class="card slist" style="padding:0">
-        <div class="filters" id="filters"></div>
-        <div id="slist"></div>
-      </div>
-      <div id="detail"></div>
+    <div id="detail"></div>
+    <div class="card slist">
+      <div class="filters" id="filters"></div>
+      <div id="slist"></div>
     </div>`;
 
   function listItems() {
@@ -876,7 +1002,7 @@ async function pageReview() {
   drawList();
   if (!sel || !app.sheets.some(s => s.sheet_id === sel)) sel = listItems()[0]?.sheet_id;
   if (sel) { drawList(); openSheet(sel); }
-  else $("detail").innerHTML = `<div class="card"><div class="empty"><b>왼쪽에서 답안지를 고르세요</b></div></div>`;
+  else $("detail").innerHTML = `<div class="card"><div class="empty"><b>답안지를 고르세요</b></div></div>`;
 
   // 답안지 한 장 열기: 판독 원본 + 지금까지의 검수 값을 합쳐서 문항별로 보여 줌
   async function openSheet(sid) {
@@ -885,8 +1011,7 @@ async function pageReview() {
     box.innerHTML = `<div class="card"><div class="empty">불러오는 중…</div></div>`;
     const rec = await api(`/api/exams/${e.exam_id}/sheets/${sid}`);
     if (rec.status !== "read") {
-      box.innerHTML = `<div class="card"><h2>${esc(rec.source)}</h2><div class="msg err" style="margin-top:12px">${esc(rec.error || "판독하지 못했습니다")}</div>
-        <p class="muted">네 모서리 표시가 모두 보이게 다시 찍어서 <a href="#/upload">사진 올리기</a>에서 올려 주세요.</p></div>`;
+      box.innerHTML = `<div class="card"><h2>${esc(rec.source)}</h2><div class="msg err" style="margin-top:12px">${esc(rec.error || "판독하지 못했습니다")}</div></div>`;
       return;
     }
     const read = rec.read, corr = (rec.review && rec.review.corrections) || {};
@@ -894,7 +1019,9 @@ async function pageReview() {
     // cur[q] = 지금 화면에서 고른 답. 검수한 값이 있으면 그것, 없으면 판독한 답
     const cur = {};
     for (const m of read.mcq) cur[m.q] = corr[m.q] != null ? [...corr[m.q]] : (m.answer ? [...m.answer] : []);
-    const flagged = read.mcq.filter(m => m.needs_review);
+    // 내가 검수할 수 있는 문항 (문항 범위 담당이면 그 범위만). 범위 밖 문항은 보기만 함
+    const rscope = new Set(myScope().review);
+    const flagged = read.mcq.filter(m => m.needs_review && rscope.has(m.q));
     // decided = 사람이 답을 고른 확인 대상 문항 (예전에 검수한 문항은 이미 고른 것으로 봄)
     // 확인 대상 문항을 하나도 안 건드리고 저장하면 전부 무응답으로 확정되는 실수를 막으려고 씀
     const decided = new Set(flagged.filter(m => corr[m.q] != null).map(m => m.q));
@@ -902,58 +1029,115 @@ async function pageReview() {
     let showAll = flagged.length === 0;
     const sidRead = read.student_id;
     const sidNow = (rec.review && rec.review.student_id) || sidRead.text || "";
+    // 사진 위 표시: crops = 정렬 이미지 안의 문항 줄·학번 칸 위치 (0~1 비율). 없으면 표시 없이 사진만
+    const crops = rec.crops, imgUrl = `${API_BASE}/api/exams/${e.exam_id}/sheets/${sid}/image`;
+    // 학번 칸 사진 조각: 정렬 이미지를 배경으로 깔고 학번 칸 위치만 보여 줌 (가로 폭에 맞춰 늘어남)
+    const sidCrop = (b) => {
+      const [x, y, cw, ch] = b, ratio = (cw * crops.aspect) / ch;
+      const px = cw >= 1 ? 0 : (x / (1 - cw)) * 100, py = ch >= 1 ? 0 : (y / (1 - ch)) * 100;
+      return `<div style="width:100%;max-width:340px;aspect-ratio:${ratio.toFixed(4)};border:${sidRead.needs_review ? "3px solid var(--warn)" : "1px solid var(--line)"};border-radius:6px;background:#fff url('${imgUrl}') no-repeat;background-size:${(100 / cw).toFixed(2)}% ${(100 / ch).toFixed(2)}%;background-position:${px.toFixed(3)}% ${py.toFixed(3)}%"></div>`;
+    };
+    const boxAt = (b, cls, attr = "") => b ? `<div class="hl ${cls}" ${attr} style="left:${b[0] * 100}%;top:${b[1] * 100}%;width:${b[2] * 100}%;height:${b[3] * 100}%"></div>` : "";
 
+    // 왼쪽 = 사진 (화면을 내려도 따라옴), 오른쪽 = 검수
     box.innerHTML = `
-      <div class="card">
-        <div class="row" style="margin-bottom:14px">
-          <h2 style="margin:0">${esc(rec.source)}</h2>
-          ${flagged.length ? `<span class="pill warn">확인할 문항 ${flagged.length}개</span>` : `<span class="pill ok">모든 문항 판독됨</span>`}
-          ${rec.review && rec.review.updated_at ? `<span class="pill gray">검수함 ${fmtDate(rec.review.updated_at)}</span>` : ""}
-        </div>
-        <div class="field sid">
-          <span class="label" style="margin:0">학번</span>
-          <input type="text" id="sidInput" inputmode="numeric" maxlength="10" value="${esc(sidNow)}" placeholder="${esc(sidRead.raw)}">
-          ${sidRead.needs_review ? `<span class="pill warn">학번을 확인하세요 (읽은 값: ${esc(sidRead.raw)})</span>` : `<span class="muted small">읽은 값: ${esc(sidRead.raw)}</span>`}
-        </div>
-        <div id="photoBox"></div>
-        <div class="row" style="margin:6px 0 10px">
-          <span class="small muted">막대 = 칸을 칠한 정도 (진할수록 많이 칠함) · 동그라미를 눌러 답을 고르세요 · 아무것도 안 고르면 무응답</span>
-          <label class="small" style="margin-left:auto"><input type="checkbox" id="showAll" ${showAll ? "checked" : ""}> 모든 문항 보기</label>
-        </div>
-        <div id="qlist"></div>
-        <div class="savebar">
-          <div class="msg err" id="revErr" style="display:none;margin:0"></div>
-          <button class="btn" id="skip" style="margin-left:auto">다음 답안지</button>
-          <button class="btn primary big" id="saveRev">확인 완료</button>
+      <div class="rv ${crops && crops.aspect > 1 ? "land" : ""}">
+        <div class="card rv-photo" id="photoCard">
+          ${crops ? `<div class="ptools"><button class="btn" id="zoomBtn" style="padding:4px 12px">전체 사진</button></div>` : ""}
+          <div class="pwrap" id="photoBox"><div class="empty">사진 불러오는 중…</div></div></div>
+        <div class="card">
+          <div class="row" style="margin-bottom:14px">
+            <h2 style="margin:0">${esc(rec.source)}</h2>
+            ${flagged.length ? `<span class="pill warn">확인할 문항 ${flagged.length}개</span>` : `<span class="pill ok">모든 문항 판독됨</span>`}
+            ${rec.review && rec.review.updated_at ? `<span class="pill gray">검수함 ${fmtDate(rec.review.updated_at)}</span>` : ""}
+          </div>
+          <div class="field sid" data-sidrow="1">
+            <span class="label" style="margin:0">학번</span>
+            <input type="text" id="sidInput" inputmode="numeric" maxlength="10" value="${esc(sidNow)}" placeholder="${esc(sidRead.raw)}">
+            ${sidRead.needs_review ? `<span class="pill warn">학번 확인 (읽은 값: ${esc(sidRead.raw)})</span>` : `<span class="small">읽은 값: ${esc(sidRead.raw)}</span>`}
+          </div>
+          ${crops && crops.sid ? `<div id="sidPhoto" style="margin:0 0 6px">${sidCrop(crops.sid)}</div>` : ""}
+          <div class="row" style="margin:6px 0 10px">
+            <label class="small" style="margin-left:auto"><input type="checkbox" id="showAll" ${showAll ? "checked" : ""}> 모든 문항 보기</label>
+          </div>
+          <div id="qlist"></div>
+          <div class="savebar">
+            <div class="msg err" id="revErr" style="display:none;margin:0"></div>
+            <button class="btn" id="skip" style="margin-left:auto">다음 답안지</button>
+            <button class="btn primary big" id="saveRev">확인 완료</button>
+          </div>
         </div>
       </div>`;
 
-    // 정렬된 사진 (백엔드에 사진 API 가 생기면 자동으로 보임, 없으면 칸을 숨김)
+    // 정렬된 사진 + 확인할 문항(주황 테두리)·지금 보는 문항(파란 테두리) 표시
     const img = new Image();
-    img.className = "photo"; img.alt = "정렬된 답안지 사진";
-    img.onload = () => { $("photoBox").innerHTML = ""; $("photoBox").appendChild(img); $("photoBox").style.marginBottom = "14px"; };
-    img.src = `${API_BASE}/api/exams/${e.exam_id}/sheets/${sid}/image`;
+    img.alt = "정렬된 답안지 사진";
+    // 판독 영역 = 객관식 줄 + 서술형 답 칸을 모두 감싸는 사각형. 기본은 이 부분만 크게 보여 줌 (학번·여백 잘라 냄, kim 11/10)
+    // 학번은 오른쪽 학번 입력칸 밑에 그 칸 사진만 따로 보여 줌
+    let area = [0, 0, 1, 1], zoomed = false;
+    if (crops) {
+      const bs = [...Object.values(crops.mcq), ...Object.values(crops.short || {})];
+      const x0 = Math.max(0, Math.min(...bs.map(b => b[0])) - 0.01), y0 = Math.max(0, Math.min(...bs.map(b => b[1])) - 0.01);
+      const x1 = Math.min(1, Math.max(...bs.map(b => b[0] + b[2])) + 0.01), y1 = Math.min(1, Math.max(...bs.map(b => b[1] + b[3])) + 0.01);
+      area = [x0, y0, x1 - x0, y1 - y0]; zoomed = true;
+    }
+    // 사진 칸 크기·위치 맞추기: pwrap = 보이는 창, inner = 사진 전체 (area 부분이 창에 꽉 차게 늘리고 옮김)
+    function fitPhoto() {
+      const pb = $("photoBox"), inner = pb && pb.querySelector(".inner"); if (!inner) return;
+      const [ax, ay, aw, ah] = zoomed ? area : [0, 0, 1, 1];
+      pb.style.aspectRatio = `${aw * (crops ? crops.aspect : img.naturalWidth / img.naturalHeight)} / ${ah}`;
+      Object.assign(inner.style, { width: `${100 / aw}%`, height: `${100 / ah}%`, left: `${-ax / aw * 100}%`, top: `${-ay / ah * 100}%` });
+      if ($("zoomBtn")) $("zoomBtn").textContent = zoomed ? "전체 사진" : "판독 부분만";
+    }
+    img.onload = () => {
+      const pb = $("photoBox"); if (!pb) return;
+      pb.innerHTML = `<div class="inner"></div>`;
+      const inner = pb.firstChild;
+      inner.appendChild(img);
+      if (crops) inner.insertAdjacentHTML("beforeend",
+        flagged.map(m => boxAt(crops.mcq[m.q], "")).join("") +
+        `<div class="hl cur" id="hlCur" style="display:none"></div>`);
+      fitPhoto();
+    };
+    if ($("zoomBtn")) $("zoomBtn").onclick = () => { zoomed = !zoomed; fitPhoto(); };
+    img.onerror = () => { if ($("photoBox")) $("photoBox").innerHTML = `<div class="empty">사진 없음</div>`; };
+    img.src = imgUrl;
+    // 오른쪽 문항에 마우스를 올리거나 누르면 왼쪽 사진에서 그 줄을 파랗게 짚고 보이게 스크롤
+    function pointAt(b) {
+      const h = $("hlCur"); if (!h || !b) return;
+      Object.assign(h.style, { display: "", left: `${b[0] * 100}%`, top: `${b[1] * 100}%`, width: `${b[2] * 100}%`, height: `${b[3] * 100}%` });
+      const pc = $("photoCard"), y = b[1] * img.clientHeight + img.parentElement.offsetTop + $("photoBox").offsetTop;
+      if (pc.scrollHeight > pc.clientHeight && (y < pc.scrollTop || y > pc.scrollTop + pc.clientHeight - 60)) pc.scrollTop = Math.max(0, y - pc.clientHeight / 3);
+    }
+    const hoverQ = (ev) => {
+      if (!crops) return;
+      const qc = ev.target.closest(".qcard");
+      if (qc) { pointAt(crops.mcq[qc.dataset.q]); return; }
+    };
+    box.querySelector(".rv > .card:last-child").addEventListener("mouseover", hoverQ);
+    box.querySelector(".rv > .card:last-child").addEventListener("focusin", hoverQ);
 
     function drawQ() {
       const qs = showAll ? read.mcq : flagged;
       $("qlist").innerHTML = qs.map(m => {
         const a = cur[m.q] || [];
         const key = keyAns && keyAns[m.q];
-        return `<div class="qcard ${m.needs_review ? "flag" : ""}">
-          <span class="qn">${m.q}번</span>
-          <span class="why">${m.needs_review ? READ_WHY[m.status] || "확인 필요" : ""}</span>
-          <div class="fills">${m.fill.map((f, i) => `<div class="fill"><div class="bar"><i class="${f >= 0.6 ? "hi" : ""}" style="height:${Math.round(f * 100)}%"></i></div>${Math.round(f * 100)}%</div>`).join("")}</div>
+        const lock = !rscope.has(m.q);
+        return `<div class="qcard ${m.needs_review && !lock ? "flag" : ""}" data-q="${m.q}" ${lock ? `style="background:var(--soft)" title="내가 맡은 문항이 아닙니다"` : ""}>
+          <span class="qn">${m.q}번${sectionOf(m.q) ? `<div class="small">${esc(sectionOf(m.q))}</div>` : ""}</span>
+          ${m.needs_review ? `<span class="why">${READ_WHY[m.status] || "확인 필요"}</span>` : ""}
           <div class="bubbles" style="margin-left:auto">${Array.from({ length: C }, (_, i) =>
-            `<button type="button" class="bub ${a.includes(i + 1) ? "on" : ""}" data-q="${m.q}" data-c="${i + 1}">${i + 1}</button>`).join("")}
-            <button type="button" class="btn nores ${decided.has(m.q) && !a.length ? "on" : ""}" data-q="${m.q}" style="padding:6px 10px">무응답</button></div>
+            `<button type="button" class="bub ${a.includes(i + 1) ? "on" : ""}" data-q="${m.q}" data-c="${i + 1}" ${lock ? "disabled" : ""}>${i + 1}</button>`).join("")}
+            <button type="button" class="btn nores ${decided.has(m.q) && !a.length ? "on" : ""}" data-q="${m.q}" style="padding:6px 10px" ${lock ? "disabled" : ""}>무응답</button></div>
           ${key ? `<span class="small muted" style="width:62px;text-align:right">정답 ${key.join(",")}</span>` : ""}
         </div>`;
-      }).join("") || `<div class="empty small">확인할 문항이 없습니다. 학번만 맞는지 보고 ‘확인 완료’를 누르세요.</div>`;
+      }).join("") || `<div class="empty small">확인할 문항이 없습니다</div>`;
     }
     drawQ();
     $("showAll").onchange = (ev) => { showAll = ev.target.checked; drawQ(); };
     $("qlist").onclick = (ev) => {
       const nr = ev.target.closest(".nores");
+      if (ev.target.closest("[disabled]")) return;
       if (nr) { cur[nr.dataset.q] = []; decided.add(Number(nr.dataset.q)); drawQ(); return; }
       const b = ev.target.closest(".bub"); if (!b) return;
       const q = b.dataset.q, c = Number(b.dataset.c), a = cur[q] || [];
@@ -979,6 +1163,7 @@ async function pageReview() {
       for (const m of read.mcq) {
         const a = cur[m.q] || [];
         const orig = m.answer || [];
+        if (!rscope.has(m.q)) continue;                       // 맡지 않은 문항은 보내지 않음
         if (m.needs_review || corr[m.q] != null || a.join() !== orig.join()) corrections[m.q] = a;
       }
       const sidVal = $("sidInput").value.trim();
@@ -1001,14 +1186,14 @@ async function pageReview() {
 
 async function pageResults() {
   const e = app.exam;
-  setTop("5. 결과·엑셀", "검수 내용과 최신 정답표로 다시 채점한 결과입니다.",
+  setTop("5. 결과·엑셀", "",
     `<a class="btn primary" href="${API_BASE}/api/exams/${e.exam_id}/results.xlsx">엑셀 내려받기</a>`);
   let res;
   try { res = await api(`/api/exams/${e.exam_id}/results`); }
   catch (ex) {
     if (ex.status === 409) {
       setTop("5. 결과·엑셀", "");
-      $("view").innerHTML = `<div class="card"><div class="empty"><b>정답표가 아직 없습니다</b>채점하려면 정답부터 넣어 주세요.<br><a class="btn primary" href="#/key" style="margin-top:14px">정답 입력하기</a></div></div>`;
+      $("view").innerHTML = `<div class="card"><div class="empty"><b>정답표가 아직 없습니다</b><a class="btn primary" href="#/key" style="margin-top:14px">정답 입력하기</a></div></div>`;
       return;
     }
     throw ex;
@@ -1036,6 +1221,11 @@ async function pageResults() {
   const statusPill = (r) => r.status === "확정" ? `<span class="pill ok">확정</span>`
     : r.status === "검수 대기" ? `<span class="pill warn">검수 대기</span>` : `<span class="pill bad">재촬영 필요</span>`;
   const sorted = [...res].sort((a, b) => (a.student_id || "~").localeCompare(b.student_id || "~"));
+  // 문항 범위(과목)별 소계 열 (범위가 있을 때만)
+  const secs = (res.find(r => r.sections) || {}).sections || [];
+  const secHead = secs.map(s => `<th class="num">${esc(s.name)}<div class="small">${s.from}~${s.to}번</div></th>`).join("");
+  const secCells = (r) => secs.map((_, i) => { const x = r.sections && r.sections[i];
+    return `<td class="num">${x ? `${fmtNum(x.score)}<span> / ${fmtNum(x.total)}</span>${x.pending ? `<div class="small">검수 ${x.pending}</div>` : ""}` : "-"}</td>`; }).join("");
 
   $("view").innerHTML = `
     <div class="stats">
@@ -1045,16 +1235,16 @@ async function pageResults() {
       <div class="stat ${pend.length ? "warn" : ""}"><div class="k">검수 대기</div><div class="v">${pend.length}<small> 장</small></div></div>
       <div class="stat ${retake.length ? "bad" : ""}"><div class="k">재촬영 필요</div><div class="v">${retake.length}<small> 장</small></div></div>
     </div>
-    ${pend.length ? `<div class="msg info">검수 대기 ${pend.length}장은 점수가 아직 확정되지 않았습니다. <a href="#/review">검수하러 가기 →</a></div>` : ""}
+    ${pend.length ? `<div class="msg info">검수 대기 ${pend.length}장 <a href="#/review">검수하러 가기 →</a></div>` : ""}
     <div class="card">
       <h2>학생별 점수</h2>
-      <p class="desc">학번 순서입니다. 검수 대기 답안지는 ‘지금까지 점수 ~ 가능한 최고점’으로 보여 줍니다.</p>
       <div class="tablewrap"><table class="t">
-        <thead><tr><th>학번</th><th>사진 파일</th><th>상태</th><th class="num">점수</th><th class="num">맞음</th><th class="num">틀림</th><th class="num">무응답</th><th class="num">복수 표시</th></tr></thead>
+        <thead><tr><th>학번</th><th>사진 파일</th><th>상태</th>${secHead}<th class="num">총점</th><th class="num">맞음</th><th class="num">틀림</th><th class="num">무응답</th><th class="num">복수 표시</th></tr></thead>
         <tbody>${sorted.map(r => `<tr>
           <td class="mono">${esc(r.student_id || "-")}</td>
           <td class="small">${esc(r.source)}</td>
           <td>${statusPill(r)}${r.status === "재촬영 필요" && r.error ? `<div class="small muted">${esc(r.error)}</div>` : ""}</td>
+          ${secCells(r)}
           <td class="num"><b>${r.status === "확정" ? fmtNum(r.score) : r.status === "검수 대기" ? `${fmtNum(r.confirmed_score)}~${fmtNum(r.max_possible)}` : "-"}</b>${r.total_points != null ? `<span class="muted"> / ${fmtNum(r.total_points)}</span>` : ""}</td>
           <td class="num">${r.counts?.correct ?? "-"}</td><td class="num">${r.counts?.wrong ?? "-"}</td>
           <td class="num">${r.counts?.blank ?? "-"}</td><td class="num">${r.counts?.multi ?? "-"}</td>
@@ -1062,19 +1252,396 @@ async function pageResults() {
     </div>
     <div class="card">
       <h2>문항별 정답률</h2>
-      <p class="desc">빨간 막대는 정답률 40% 미만인 문항입니다. 정답을 잘못 넣었거나 어려운 문항일 수 있습니다.</p>
       <div class="rates">${rates.map(x => `<div class="rate"><b>${x.q}번</b>
         <div class="track"><div class="${x.rate != null && x.rate < 0.4 ? "low" : ""}" style="width:${x.rate == null ? 0 : Math.round(x.rate * 100)}%"></div></div>
         <span class="num" style="text-align:right">${x.rate == null ? "-" : Math.round(x.rate * 100) + "%"}</span></div>`).join("")}</div>
     </div>`;
 }
 
+// ---------------- 로그인 · 권한 ----------------
+// 권한 단계 (백엔드 app/access.py 와 같은 순서). 숫자가 클수록 더 많이 할 수 있음
+const LV = { none: 0, view: 1, review: 2, owner: 3, admin: 4 };
+const LV_LABEL = { view: "참가자 · 보기만", review: "참가자 · 검수 가능", owner: "시험 관리자", manager: "시험 관리자", admin: "관리자" };
+// 지금 시험에서 need 단계 이상인지 (예: can("owner") → 정답표 수정·삭제 가능)
+function can(need, exam = app.exam) { return LV[(exam && exam.my_level) || "none"] >= LV[need]; }
+// 내가 정답 입력(key)·검수(review)할 수 있는 문항 번호 (서버 access.my_scope)
+function myScope() { return (app.exam && app.exam.my_scope) || { key: [], review: [], sections: [], all: false }; }
+// 문항 번호 → 과목(문항 범위) 이름
+function sectionOf(q) { const s = ((app.exam && app.exam.sections) || []).find(x => x.from <= q && q <= x.to); return s ? s.name : ""; }
+const isAdmin = () => app.user && app.user.role === "admin";
+const canCreate = () => app.user && app.user.role === "user";   // 사용자는 누구나 시험을 만들 수 있음 (만들면 그 시험의 시험 관리자)
+
+// 로그인 화면 그리기. 계정이 하나도 없으면 '첫 관리자 계정 만들기' 화면
+async function showLogin(msg = "") {
+  app.user = null; app.exam = null; app.key = null; app.sheets = null;
+  const st = await api("/api/auth/status").catch(() => ({ needs_setup: false }));
+  document.querySelector(".app").hidden = true;
+  const box = $("login"); box.hidden = false;
+  const setup = st.needs_setup;
+  let asAdmin = false;
+  box.innerHTML = `
+      <form id="loginForm" novalidate>
+        ${setup ? `<h1>첫 관리자 계정 만들기</h1>`
+        : `<h1>통합 로그인</h1>
+          <div class="seg" id="roleTab"><button type="button" aria-pressed="true">사용자</button><button type="button" aria-pressed="false">관리자</button></div>`}
+        <div class="field"><label for="lg_id">아이디</label><input type="text" id="lg_id" autocomplete="username" autocapitalize="off" placeholder="${setup ? "예) admin" : "teacher01"}"></div>
+        ${setup ? `<div class="field"><label for="lg_name">이름</label><input type="text" id="lg_name" maxlength="30" placeholder="예) 김재형"></div>` : ""}
+        <div class="field"><label for="lg_pw">비밀번호 ${setup ? `<span class="hint">8자 이상</span>` : ""}</label><input type="password" id="lg_pw" autocomplete="${setup ? "new-password" : "current-password"}"></div>
+        ${setup ? `<div class="field"><label for="lg_pw2">비밀번호 확인</label><input type="password" id="lg_pw2" autocomplete="new-password"></div>`
+        : `<div class="opts"><label><input type="checkbox" id="lg_keep"> 로그인 상태 유지</label><a id="lg_find">비밀번호 찾기</a></div>`}
+        <div class="msg err" id="lg_err" style="${msg ? "" : "display:none"}">${esc(msg)}</div>
+        <button class="btn primary big block" type="submit">${setup ? "관리자 계정 만들고 시작하기" : "로그인"}</button>
+        ${setup ? "" : `<div class="note">계정이 없으면 관리자에게 권한을 요청하세요</div>`}
+      </form>`;
+  const err = (t) => { $("lg_err").style.display = ""; $("lg_err").textContent = t; };
+  if (!setup) {
+    const tabs = $("roleTab").children;
+    [...tabs].forEach((b, i) => b.onclick = () => { asAdmin = i === 1; tabs[0].setAttribute("aria-pressed", String(!asAdmin)); tabs[1].setAttribute("aria-pressed", String(asAdmin)); });
+    $("lg_find").onclick = () => err("비밀번호를 잊었으면 관리자에게 ‘비밀번호 초기화’를 요청하세요. 관리자가 임시 비밀번호를 알려 줍니다.");
+  }
+  $("lg_id").focus();
+  $("loginForm").onsubmit = async (e) => {
+    e.preventDefault();
+    const username = $("lg_id").value.trim().toLowerCase(), password = $("lg_pw").value;
+    if (!username || !password) return err("아이디와 비밀번호를 넣어 주세요.");
+    try {
+      if (setup) {
+        if (password !== $("lg_pw2").value) return err("비밀번호 확인이 다릅니다.");
+        app.user = await api("/api/auth/setup", jsonBody("POST", { username, name: $("lg_name").value.trim(), password }));
+      } else {
+        app.user = await api("/api/auth/login", jsonBody("POST", { username, password, remember: $("lg_keep").checked, as_admin: asAdmin }));
+      }
+    } catch (ex) { return err(ex.message); }
+    await enterApp(asAdmin || setup ? "#/admin/exams" : "#/exams");
+  };
+}
+
+// 로그인 뒤 본 화면으로 들어가기. 임시 비밀번호로 들어왔으면 비밀번호 바꾸기 화면부터
+async function enterApp(hash) {
+  $("login").hidden = true; $("login").innerHTML = "";
+  document.querySelector(".app").hidden = false;
+  let last = null; try { last = localStorage.getItem(LS_CURRENT); } catch (_) {}
+  if (last && !isAdmin()) await selectExam(last).catch(() => {});
+  const want = app.user.must_change ? "#/account" : (hash || location.hash || "#/exams");
+  if (location.hash === want) route(); else location.hash = want;
+}
+
+async function logout() {
+  await api("/api/auth/logout", { method: "POST" }).catch(() => {});
+  try { localStorage.removeItem(LS_CURRENT); } catch (_) {}
+  history.replaceState(null, "", location.pathname);
+  showLogin();
+}
+
+// ---------------- 내 계정 (비밀번호 바꾸기) ----------------
+
+async function pageAccount() {
+  const u = app.user;
+  setTop("내 계정", `${esc(u.name)} · ${esc(u.username)} · ${esc(u.role_label)}`);
+  $("view").innerHTML = `
+    ${u.must_change ? `<div class="msg info">새 비밀번호로 바꿔 주세요.</div>` : ""}
+    <form class="card" id="pwForm" style="max-width:480px">
+      <h2>비밀번호 바꾸기</h2>
+      <div class="field"><label for="pw0">지금 비밀번호</label><input type="password" id="pw0" autocomplete="current-password"></div>
+      <div class="field"><label for="pw1">새 비밀번호 <span class="hint">8자 이상</span></label><input type="password" id="pw1" autocomplete="new-password"></div>
+      <div class="field"><label for="pw2">새 비밀번호 확인</label><input type="password" id="pw2" autocomplete="new-password"></div>
+      <div class="msg err" id="pwErr" style="display:none"></div>
+      <button class="btn primary" type="submit">비밀번호 바꾸기</button>
+    </form>`;
+  $("pwForm").onsubmit = async (e) => {
+    e.preventDefault();
+    const bad = (t) => { $("pwErr").style.display = ""; $("pwErr").textContent = t; };
+    if ($("pw1").value !== $("pw2").value) return bad("새 비밀번호 확인이 다릅니다.");
+    try { await api("/api/auth/password", jsonBody("POST", { old_password: $("pw0").value, new_password: $("pw1").value })); }
+    catch (ex) { return bad(ex.message); }
+    app.user = await api("/api/auth/me");
+    toast("비밀번호를 바꿨습니다");
+    location.hash = isAdmin() ? "#/admin/exams" : "#/exams";
+  };
+}
+
+// ---------------- 참여자 권한 패널 (시험 현황 · 관리자 '지난 시험 관리' 공용) ----------------
+// el 안에 이 시험의 소유자·참여자를 그림. 소유자·관리자면 고칠 수 있고, 아니면 목록만 보여 줌
+async function renderAccessPanel(el, examId, examName, onSaved) {
+  el.innerHTML = `<div class="empty">불러오는 중…</div>`;
+  const [acc, dir] = await Promise.all([api(`/api/exams/${examId}/access`), api("/api/users/directory").catch(() => [])]);
+  const edit = LV[acc.my_level] >= LV.owner, admin = acc.my_level === "admin";
+  const N = acc.num_questions || 0;
+  const st = { owner: acc.owner || "", members: acc.members.map(m => ({ ...m })),
+               sections: (acc.sections || []).map(s => ({ name: s.name, from: s.from, to: s.to, assignees: [...s.assignees] })) };
+  const nameOf = (u) => (dir.find(d => d.username === u) || {}).name || u;
+  const ownerCands = dir.filter(d => d.role === "user");   // 만든 사람(대표 시험 관리자)으로 정할 수 있는 사용자
+  const people = () => [st.owner, ...st.members.map(m => m.username)].filter(Boolean);
+  function draw() {
+    const used = new Set([st.owner, ...st.members.map(m => m.username)]);
+    const addable = dir.filter(d => d.role === "user" && !used.has(d.username));   // 관리자 계정은 참여자로 넣지 않음
+    const secRows = st.sections.map((s, i) => edit ? `
+      <div class="secrow" data-s="${i}">
+        <div class="row">
+          <input type="text" data-f="name" value="${esc(s.name)}" placeholder="과목 (예: 물리)" style="flex:1;min-width:90px" maxlength="20">
+          <input type="number" data-f="from" value="${s.from}" min="1" max="${N}" style="width:70px" aria-label="시작 문항">
+          <span>~</span>
+          <input type="number" data-f="to" value="${s.to}" min="1" max="${N}" style="width:70px" aria-label="끝 문항">
+          <span>번</span>
+          <button type="button" class="btn del" data-delsec="${i}">빼기</button>
+        </div>
+        <div class="row small" style="margin-top:8px">담당: ${people().map(u => `<label class="chk"><input type="checkbox" data-who="${esc(u)}" ${s.assignees.includes(u) ? "checked" : ""}> ${esc(nameOf(u))}</label>`).join("")}</div>
+      </div>` : `
+      <div class="who"><div><div class="nm">${esc(s.name)} · ${s.from}~${s.to}번</div></div>
+        <span>${s.assignees.length ? s.assignees.map(u => esc(nameOf(u))).join(", ") : "담당 없음"}</span></div>`).join("");
+    el.innerHTML = `
+      <h2>참여자 권한</h2>
+      <div class="acc">
+        <div class="who"><div><div class="nm">${st.owner ? esc(nameOf(st.owner)) : "담당 없음"}</div>${st.owner ? `<div class="id">${esc(st.owner)}</div>` : ""}</div>
+          ${admin ? `<select id="accOwner" aria-label="담당 시험 관리자"><option value="">(담당 없음)</option>${ownerCands.map(d =>
+            `<option value="${esc(d.username)}" ${d.username === st.owner ? "selected" : ""}>${esc(d.name)} (${esc(d.username)})</option>`).join("")}</select>`
+            : `<span class="pill blue">시험 관리자</span>`}</div>
+        ${st.members.map((m, i) => `
+          <div class="who"><div><div class="nm">${esc(nameOf(m.username))}</div><div class="id">${esc(m.username)}</div></div>
+            ${edit ? `<select data-i="${i}" aria-label="${esc(m.username)} 권한">
+              <option value="manager" ${m.level === "manager" ? "selected" : ""}>시험 관리자</option>
+              <option value="review" ${m.level === "review" ? "selected" : ""}>참가자 · 검수 가능</option>
+              <option value="view" ${m.level === "view" ? "selected" : ""}>참가자 · 보기만</option>
+              <option value="">빼기</option></select>` : `<span class="pill gray">${LV_LABEL[m.level]}</span>`}</div>`).join("")}
+      </div>
+      ${edit ? `
+        ${addable.length ? `<div class="row" style="margin-top:16px">
+          <select id="accAdd" style="flex:1">${addable.map(d => `<option value="${esc(d.username)}">${esc(d.name)} (${esc(d.username)})</option>`).join("")}</select>
+          <button class="btn" id="accAddBtn">+ 참여자 추가</button>
+        </div>` : ""}
+` : ""}
+      <h2 style="margin-top:22px">문항 범위 담당</h2>
+      <div class="acc">${secRows || `<p class="small" style="margin:0">문항 범위가 없습니다.</p>`}</div>
+      ${edit ? `<button class="btn" id="secAdd" style="margin-top:12px">+ 문항 범위 추가</button>
+        <button class="btn primary block big" id="accSave" style="margin-top:18px">저장</button>
+        <div class="msg err" id="accErr" style="display:none;margin:12px 0 0"></div>`
+        : ""}`;
+    if (!edit) return;
+    if (admin) $("accOwner").onchange = (e) => { st.owner = e.target.value; st.members = st.members.filter(m => m.username !== st.owner); draw(); };
+    for (const s of el.querySelectorAll("select[data-i]"))
+      s.onchange = () => {
+        const i = +s.dataset.i;
+        if (s.value) st.members[i].level = s.value;
+        else { const gone = st.members[i].username; st.members.splice(i, 1); st.sections.forEach(x => x.assignees = x.assignees.filter(u => u !== gone)); }
+        draw();
+      };
+    if ($("accAddBtn")) $("accAddBtn").onclick = () => { st.members.push({ username: $("accAdd").value, level: "review" }); draw(); };
+    for (const row of el.querySelectorAll(".secrow")) {
+      const sec = st.sections[+row.dataset.s];
+      for (const inp of row.querySelectorAll("[data-f]"))
+        inp.oninput = () => { sec[inp.dataset.f] = inp.dataset.f === "name" ? inp.value : Number(inp.value); };
+      for (const cb of row.querySelectorAll("[data-who]"))
+        cb.onchange = () => { sec.assignees = cb.checked ? [...sec.assignees, cb.dataset.who] : sec.assignees.filter(u => u !== cb.dataset.who); };
+    }
+    for (const b of el.querySelectorAll("[data-delsec]")) b.onclick = () => { st.sections.splice(+b.dataset.delsec, 1); draw(); };
+    $("secAdd").onclick = () => {
+      const last = st.sections.reduce((m, s) => Math.max(m, s.to), 0);
+      const from = Math.min(last + 1, N), to = N;
+      st.sections.push({ name: "", from, to, assignees: [] }); draw();
+    };
+    $("accSave").onclick = async () => {
+      const body = { members: Object.fromEntries(st.members.map(m => [m.username, m.level])), sections: st.sections };
+      if (admin) body.owner = st.owner;
+      try { await api(`/api/exams/${examId}/access`, jsonBody("PUT", body)); }
+      catch (ex) { $("accErr").style.display = ""; $("accErr").textContent = ex.message; return; }
+      toast("참여자 권한을 저장했습니다");
+      if (app.exam && app.exam.exam_id === examId) await selectExam(examId).catch(() => {});   // 내 문항 범위 다시 받기
+      if (onSaved) onSaved();
+    };
+  }
+  draw();
+}
+
+// ---------------- 관리자: 지난 시험 관리 ----------------
+
+const EXAM_STATUS_PILL = { "준비": "gray", "검수 중": "warn", "완료": "ok" };
+
+async function pageAdminExams() {
+  setTop("지난 시험 관리", "",
+    `<a class="btn" href="${API_BASE}/api/admin/exams.xlsx">엑셀로 내보내기</a>`);
+  const rows = await api("/api/admin/exams");
+  const owners = [...new Map(rows.filter(r => r.owner).map(r => [r.owner, r.owner_name])).entries()];
+  app.adminSel = rows.find(r => r.exam_id === app.adminSel)?.exam_id || rows[0]?.exam_id || null;
+  const f = app.adminFilter || (app.adminFilter = { q: "", owner: "" });
+  $("view").innerHTML = rows.length ? `
+    <div class="admin2">
+      <div class="card" style="padding:0;overflow:hidden">
+        <div class="toolbar" style="padding:16px 16px 0">
+          <input type="text" id="fq" placeholder="시험명·과목·시험 ID 검색" value="${esc(f.q)}">
+          <select id="fo"><option value="">만든 사람 전체</option><option value="-" ${f.owner === "-" ? "selected" : ""}>만든 사람 없음</option>
+            ${owners.map(([u, n]) => `<option value="${esc(u)}" ${f.owner === u ? "selected" : ""}>${esc(n)}</option>`).join("")}</select>
+          <span class="muted small" id="fcount" style="align-self:center"></span>
+        </div>
+        <div class="tablewrap"><table class="t">
+          <thead><tr><th>시험</th><th>만든 사람</th><th>날짜</th><th class="num">답안지</th><th>상태</th><th></th></tr></thead>
+          <tbody id="arows"></tbody></table></div>
+      </div>
+      <div class="card" id="accPanel"></div>
+    </div>`
+    : `<div class="card"><div class="empty"><b>아직 시험이 없습니다</b></div></div>`;
+  if (!rows.length) return;
+
+  const match = (r) => {
+    const q = f.q.trim().toLowerCase();
+    if (q && ![r.exam_name, r.subject, r.exam_id].some(x => (x || "").toLowerCase().includes(q))) return false;
+    if (f.owner === "-") return !r.owner;
+    return !f.owner || r.owner === f.owner;
+  };
+  function drawRows() {
+    const shown = rows.filter(match);
+    $("fcount").textContent = `${shown.length}개 / 전체 ${rows.length}개`;
+    $("arows").innerHTML = shown.map(r => `
+      <tr class="click ${r.exam_id === app.adminSel ? "sel" : ""}" data-id="${esc(r.exam_id)}">
+        <td><b>${esc(r.exam_name) || "(시험명 없음)"}</b><div class="muted small">${[esc(r.subject), `객관식 ${r.num_questions}`].filter(Boolean).join(" · ")}</div></td>
+        <td>${r.owner ? esc(r.owner_name) : `<span class="muted">없음</span>`}${r.members.length ? `<div class="muted small">+ 참여자 ${r.members.length}명</div>` : ""}</td>
+        <td>${(r.created_at || "").slice(5, 10).replace("-", "/")}</td>
+        <td class="num">${r.n_sheets}장</td>
+        <td><span class="pill ${EXAM_STATUS_PILL[r.status]}">${r.status}</span>
+          ${r.n_pending || r.n_retake ? `<div class="muted small">${[r.n_pending ? `검수 ${r.n_pending}` : "", r.n_retake ? `재촬영 ${r.n_retake}` : ""].filter(Boolean).join(" · ")}</div>` : ""}</td>
+        <td style="text-align:right;white-space:nowrap">
+          <button class="btn del" data-del="${esc(r.exam_id)}" data-name="${esc(r.exam_name)}">삭제</button></td>
+      </tr>`).join("") || `<tr><td colspan="6" class="empty">조건에 맞는 시험이 없습니다</td></tr>`;
+    for (const tr of document.querySelectorAll("#arows tr[data-id]"))
+      tr.onclick = async (ev) => {
+        const del = ev.target.closest("[data-del]"), open = ev.target.closest("[data-open]");
+        if (del) return deleteExam(del.dataset.del, del.dataset.name);
+        if (open) { await selectExam(open.dataset.open); location.hash = "#/overview"; return; }
+        app.adminSel = tr.dataset.id; drawRows(); drawPanel();
+      };
+  }
+  const drawPanel = () => {
+    const r = rows.find(x => x.exam_id === app.adminSel);
+    if (r) renderAccessPanel($("accPanel"), r.exam_id, r.exam_name, () => route()).catch(e => $("accPanel").innerHTML = `<div class="msg err">${esc(e.message)}</div>`);
+  };
+  $("fq").oninput = (e) => { f.q = e.target.value; drawRows(); };
+  $("fo").onchange = (e) => { f.owner = e.target.value; drawRows(); };
+  drawRows(); drawPanel();
+}
+
+// ---------------- 관리자: 계정 관리 ----------------
+
+async function pageAdminUsers() {
+  setTop("계정 관리");
+  const users = await api("/api/admin/users");
+  const shown = app.lastSecret; app.lastSecret = null;   // 방금 만든 임시 비밀번호 (한 번만 보여 줌)
+  $("view").innerHTML = `
+    ${shown ? `<div class="msg ok"><b>${esc(shown.username)}</b> 계정의 임시 비밀번호: <span class="secret">${esc(shown.pw)}</span>
+      <div class="small" style="margin-top:6px">이 화면을 벗어나면 다시 볼 수 없습니다.</div></div>` : ""}
+    <form class="card" id="newUser">
+      <h2>계정 만들기</h2>
+      <div class="row" style="align-items:flex-end">
+        <div class="field" style="margin:0;flex:1;min-width:150px"><label for="nu_id">아이디 <span class="hint">영문 소문자·숫자 3~30자</span></label><input type="text" id="nu_id" autocapitalize="off" placeholder="teacher01"></div>
+        <div class="field" style="margin:0;flex:1;min-width:120px"><label for="nu_name">이름</label><input type="text" id="nu_name" maxlength="30" placeholder="교사 A"></div>
+        <div class="field" style="margin:0"><label for="nu_role">역할</label><select id="nu_role"><option value="user">사용자</option><option value="admin">관리자</option></select></div>
+        <div class="field" style="margin:0;flex:1;min-width:150px"><label for="nu_pw">비밀번호</label><input type="password" id="nu_pw" autocomplete="new-password" placeholder="비우면 임시 비밀번호"></div>
+        <button class="btn primary" type="submit">계정 만들기</button>
+      </div>
+      <div class="msg err" id="nuErr" style="display:none;margin:12px 0 0"></div>
+    </form>
+    <div class="card" style="padding:0;overflow:hidden"><div class="tablewrap"><table class="t">
+      <thead><tr><th>이름</th><th>아이디</th><th>역할</th><th>상태</th><th class="num">담당 시험</th><th>마지막 로그인</th><th></th></tr></thead>
+      <tbody>${users.map(u => `<tr data-u="${esc(u.username)}">
+        <td><b>${esc(u.name)}</b>${u.username === app.user.username ? ` <span class="pill blue">나</span>` : ""}</td>
+        <td class="mono">${esc(u.username)}</td>
+        <td><select data-role aria-label="역할">${[["user", "사용자"], ["admin", "관리자"]].map(([v, l]) => `<option value="${v}" ${u.role === v ? "selected" : ""}>${l}</option>`).join("")}</select></td>
+        <td>${u.active ? (u.must_change ? `<span class="pill warn">비밀번호 변경 전</span>` : `<span class="pill ok">사용 중</span>`) : `<span class="pill gray">사용 중지</span>`}</td>
+        <td class="num">${u.n_owned}</td>
+        <td class="small">${fmtDate(u.last_login)}</td>
+        <td style="text-align:right;white-space:nowrap">
+          <button class="btn" data-act="rename">이름</button>
+          <button class="btn" data-act="reset">비밀번호 초기화</button>
+          <button class="btn ${u.active ? "del" : ""}" data-act="toggle">${u.active ? "사용 중지" : "다시 사용"}</button></td>
+      </tr>`).join("")}</tbody></table></div></div>`;
+
+  $("newUser").onsubmit = async (e) => {
+    e.preventDefault();
+    const body = { username: $("nu_id").value.trim().toLowerCase(), name: $("nu_name").value.trim(), role: $("nu_role").value, password: $("nu_pw").value || null };
+    try {
+      const u = await api("/api/admin/users", jsonBody("POST", body));
+      if (u.temp_password) app.lastSecret = { username: u.username, pw: u.temp_password };
+      toast("계정을 만들었습니다"); route();
+    } catch (ex) { $("nuErr").style.display = ""; $("nuErr").textContent = ex.message; }
+  };
+  const patch = async (u, body) => {
+    try { await api(`/api/admin/users/${encodeURIComponent(u)}`, jsonBody("PATCH", body)); toast("저장했습니다"); }
+    catch (ex) { alert(ex.message); }
+    if (u === app.user.username) app.user = await api("/api/auth/me").catch(() => app.user);
+    route();
+  };
+  for (const tr of document.querySelectorAll("tr[data-u]")) {
+    const u = tr.dataset.u, info = users.find(x => x.username === u);
+    tr.querySelector("[data-role]").onchange = (e) => patch(u, { role: e.target.value });
+    tr.querySelector("[data-act=rename]").onclick = () => { const n = prompt(`${u} 계정의 이름`, info.name); if (n != null && n.trim()) patch(u, { name: n.trim() }); };
+    tr.querySelector("[data-act=toggle]").onclick = () => {
+      if (info.active && !confirm(`${info.name}(${u}) 계정을 사용 중지할까요?\n바로 로그아웃되고 다시 사용으로 바꿀 때까지 로그인할 수 없습니다. 시험 기록은 그대로 남습니다.`)) return;
+      patch(u, { active: !info.active });
+    };
+    tr.querySelector("[data-act=reset]").onclick = async () => {
+      if (!confirm(`${info.name}(${u}) 계정의 비밀번호를 임시 비밀번호로 바꿀까요?\n지금 로그인한 곳은 모두 로그아웃됩니다.`)) return;
+      try { const r = await api(`/api/admin/users/${encodeURIComponent(u)}/reset-password`, { method: "POST" }); app.lastSecret = { username: u, pw: r.temp_password }; }
+      catch (ex) { alert(ex.message); }
+      route();
+    };
+  }
+}
+
+// ---------------- 관리자: 답안지 양식 ----------------
+
+async function pageAdminTemplates() {
+  setTop("답안지 양식");
+  const list = await api("/api/admin/templates");
+  $("view").innerHTML = `<div class="card" style="padding:0;overflow:hidden">${list.length ? `<div class="tablewrap"><table class="t">
+    <thead><tr><th>양식 ID</th><th>버전</th><th>방향</th><th>문항</th><th class="num">쓰는 시험</th><th>저장한 때</th><th></th></tr></thead>
+    <tbody>${list.map(t => `<tr>
+      <td class="mono"><b>${esc(t.template_id)}</b></td><td>v${esc(t.version)}</td><td>${oriText(t.orientation)}</td>
+      <td>${t.num_questions ? `객관식 ${t.num_questions}문항 · ${t.num_choices}지선다` : "-"}</td>
+      <td class="num">${t.n_exams}</td><td class="small">${fmtDate(t.modified_at)}</td>
+      <td style="text-align:right"><a class="btn" href="${API_BASE}${t.url}" target="_blank">좌표 JSON</a></td></tr>`).join("")}</tbody></table></div>`
+    : `<div class="empty"><b>저장된 양식이 없습니다</b></div>`}</div>`;
+}
+
+// ---------------- 관리자: 시스템 설정 ----------------
+
+async function pageAdminSettings() {
+  setTop("시스템 설정");
+  const s = await api("/api/admin/settings");
+  const val = { ...s.read };
+  const input = (k, sp) => sp.choices
+    ? `<select data-k="${k}">${Object.entries(sp.choices).map(([v, l]) => `<option value="${v}" ${val[k] === v ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>`
+    : `<input type="number" data-k="${k}" min="${sp.min}" max="${sp.max}" step="0.01" value="${val[k]}">`;
+  const defText = (k, sp) => sp.choices ? sp.choices[s.defaults[k]] : s.defaults[k];
+  $("view").innerHTML = `
+    <div class="card">
+      <h2>판독 기준값</h2>
+      ${s.updated_at ? `<p class="desc">마지막 변경: ${fmtDate(s.updated_at)} (${esc(s.updated_by || "")})</p>` : ""}
+      ${Object.entries(s.specs).map(([k, sp]) => `
+        <div class="setrow ${val[k] !== s.defaults[k] ? "changed" : ""}" data-row="${k}">
+          <div><b>${esc(sp.label)}</b><div class="def">기본값 ${esc(defText(k, sp))}${sp.choices ? "" : ` · 범위 ${sp.min}~${sp.max}`}</div></div>
+          <div>${input(k, sp)}</div>
+        </div>`).join("")}
+      <div class="msg err" id="setErr" style="display:none;margin:16px 0 0"></div>
+      <div class="row" style="margin-top:18px">
+        <button class="btn primary" id="setSave">저장</button>
+        <button class="btn" id="setReset">모두 기본값으로</button>
+      </div>
+    </div>`;
+  const collect = () => Object.fromEntries([...document.querySelectorAll("[data-k]")].map(el =>
+    [el.dataset.k, el.tagName === "SELECT" ? el.value : Number(el.value)]));
+  const save = async (body) => {
+    try { await api("/api/admin/settings", jsonBody("PUT", body)); toast("설정을 저장했습니다"); route(); }
+    catch (ex) { $("setErr").style.display = ""; $("setErr").textContent = ex.message; }
+  };
+  $("setSave").onclick = () => save(collect());
+  $("setReset").onclick = () => { if (confirm("판독 기준값을 모두 기본값으로 되돌릴까요?")) save({ ...s.defaults }); };
+}
+
 // ---------------- 시작 ----------------
 // 마지막으로 고른 시험이 있으면 다시 불러오고, 주소에 맞는 페이지를 그림
+// 로그인부터 확인: 되어 있으면 본 화면, 아니면 로그인 화면
 (async () => {
-  let last = null; try { last = localStorage.getItem(LS_CURRENT); } catch (_) {}
-  if (last) await selectExam(last).catch(() => {});
-  route();
+  try { app.user = await api("/api/auth/me"); }
+  catch (_) { return showLogin(); }
+  await enterApp(location.hash);
 })();
 </script>
 </body>

@@ -42,7 +42,7 @@
     exam_id       시험 ID
     source        원래 파일 이름 (예: "photo1.jpg")
     processed_at  처리 시각 (한국 시간)
-    status        "read"(판독 성공) / "align_failed"(정렬 실패 → 재촬영 필요)
+    status        "read"(판독 성공) / "align_failed"(정렬 실패 → 재촬영 필요) / "too_bright"(과노출·반사 → 재촬영) / "too_blurry"(흐림 → 재촬영)
     error         실패 사유 (성공이면 None)
     notes         참고 메모 목록 (예: "QR을 읽지 못해 선택한 시험의 양식으로 판독함")
     align         정렬 요약 (방향, 찾은 마커 ID, 재투영 오차, 흐림 정도, QR 읽기 성공 여부)
@@ -90,7 +90,8 @@ from grading import AnswerKey, answer_key_template, load_answer_key, parse_choic
 from grading.score import retake_record
 from pipeline import flow
 from pipeline.read import ReadConfig
-from . import service
+from grading import AnswerKeyError
+from . import access, service
 from .service import KST
 
 SHEET_ID_RE = re.compile(r"^S-[0-9A-F]{8}$")    # 답안지 ID 형식 (경로 조작 방지용 검사)
@@ -210,6 +211,7 @@ def set_answer_key(exam_id: str, answers: dict[Any, Any], points: dict[Any, Any]
                                "num_choices": exam["num_choices"], "answers": answers,
                                "points": points or {}, "default_points": default_points})
     save_answer_key(key, answer_key_path(exam_id))
+    _drop_draft(exam_id)
     return key
 
 
@@ -236,6 +238,7 @@ def import_answer_key(exam_id: str, path: str) -> AnswerKey:
                          f"({exam['num_questions']}문항·{exam['num_choices']}지)과 다릅니다")
     key.exam_id = exam_id
     save_answer_key(key, answer_key_path(exam_id))
+    _drop_draft(exam_id)
     return key
 
 
@@ -275,6 +278,8 @@ def process_photo(exam_id: str, photo_bgr: np.ndarray, source: str = "",
                   cfg: ReadConfig | None = None) -> dict[str, Any]:
     """사진 1장을 파이프라인 P1정렬 → P2시험 확인 → P3판독에 통과시키고 결과를 저장.
     - 정렬 실패      → status "align_failed"로 저장 (엑셀에 '재촬영 필요'로 표시)
+    - 과노출·부분 반사 → status "too_bright"로 저장 (재촬영 필요, 판독 결과는 참고용으로 남김)
+    - 흐림           → status "too_blurry"로 저장 (재촬영 필요, 판독 안 함)
     - 다른 시험 답안지 → status "wrong_exam", 저장하지 않고 돌려주기만 함
     - 성공           → status "read", 판독 결과(read)와 정렬 이미지 저장
 
@@ -377,6 +382,43 @@ def get_sheet(exam_id: str, sheet_id: str) -> dict[str, Any] | None:
         return json.load(f)
 
 
+def question_crops(exam_id: str) -> dict[str, Any]:
+    """검수 화면에서 문항마다 사진 조각을 보여 주려고, 정렬 이미지 안의 문항 줄 위치를 비율(0~1)로 돌려줌.
+
+    정렬 이미지는 용지 전체를 펴 놓은 그림이라서 양식 좌표(mm) ÷ 용지 크기(mm) = 이미지 안 비율이 됨.
+    반환:
+        {"mcq": {"1": [x, y, w, h], ...}, "short": {"1": [...], ...}, "sid": [x, y, w, h] 또는 None,
+         "aspect": 용지 가로÷세로}  (x·y·w·h 는 0~1 비율)
+    참고:
+        양식 좌표(layout)만 있으면 되므로 모드 B(등록 양식)·C(자동 탐지 양식)도 같은 형식의 layout 을 만들면 그대로 씀
+    """
+    from sheetgen import frame as F
+    _, layout = _exam_and_layout(exam_id)
+    # 용지 크기: 양식에 적혀 있으면 그 값 (모드 B·C 처럼 A4가 아닌 등록 양식 대비), 없으면 방향별 A4
+    W, H = layout.get("page_size_mm") or layout.get("frame", {}).get("page_size_mm") or F.page_size(layout.get("orientation", "portrait"))
+
+    def frac(b: list[float], pad: float = 1.5) -> list[float]:
+        x, y, w, h = b
+        x, y = max(0.0, x - pad), max(0.0, y - pad)
+        return [round(x / W, 5), round(y / H, 5), round(min(w + 2 * pad, W - x) / W, 5), round(min(h + 2 * pad, H - y) / H, 5)]
+
+    out: dict[str, Any] = {"mcq": {}, "short": {}, "sid": None, "aspect": round(W / H, 5)}   # aspect = 용지 가로÷세로
+    for q in (layout.get("mcq") or {}).get("questions", []):
+        b = q.get("row_bbox_mm")
+        if not b:   # 줄 영역이 없는 옛 양식 → 동그라미들을 감싸는 영역
+            xs = [c["bbox_mm"] for c in q["choices"]]
+            x0, y0 = min(c[0] for c in xs), min(c[1] for c in xs)
+            b = [x0, y0, max(c[0] + c[2] for c in xs) - x0, max(c[1] + c[3] for c in xs) - y0]
+        out["mcq"][str(q["q"])] = frac(b)
+    for it in (layout.get("short_answers") or {}).get("items", []):   # 서술형 답 칸 (검수 화면에서 객관식과 함께 보여 줌)
+        if it.get("answer_bbox_mm"):
+            out["short"][str(it["no"])] = frac(it["answer_bbox_mm"], pad=1.0)
+    sb = (layout.get("student_id") or {}).get("bbox_mm")
+    if sb:
+        out["sid"] = frac(sb)
+    return out
+
+
 def aligned_image_path(exam_id: str, sheet_id: str) -> str | None:
     """답안지 한 장의 정렬 이미지(P1 출력, sheets/<sheet_id>_aligned.jpg) 경로. 검수 화면에 보여 줄 사진.
 
@@ -427,6 +469,145 @@ def review_sheet(exam_id: str, sheet_id: str, corrections: dict[Any, Any] | None
     return _save_sheet(rec)
 
 
+# ---------------- 문항 범위별 정답 입력 (통합 시험, 11/7) ----------------
+# 여러 선생님이 자기 범위 문항의 정답만 넣음 → 아직 다 안 찬 정답표는 answer_key_draft.json 에 모아 둠
+# 모든 문항이 차면 그때 진짜 정답표(answer_key.json)로 저장함 (그 전까지 채점은 409 '정답표 없음')
+# 정답표가 이미 완성된 뒤에는 draft 없이 바로 정답표를 고침
+
+def _draft_path(exam_id: str) -> str:
+    return os.path.join(_exam_dir(exam_id), "answer_key_draft.json")
+
+
+def _drop_draft(exam_id: str) -> None:
+    p = _draft_path(exam_id)
+    if os.path.exists(p):
+        os.remove(p)
+
+
+def get_key_draft(exam_id: str) -> dict[str, Any]:
+    """지금까지 입력된 정답 (완성된 정답표가 있으면 그것, 없으면 draft).
+
+    반환:
+        {"answers": {"1": [3], ...}, "points": {"5": 2.0}, "default_points": 1.0,
+         "complete": False, "missing": [11, 12, ...], "num_questions": 20}
+    """
+    exam, _ = _exam_and_layout(exam_id)
+    n = exam["num_questions"]
+    key = get_answer_key(exam_id)
+    if key is not None:
+        d = key.to_dict()
+        base = {"answers": d["answers"], "points": d["points"], "default_points": d["default_points"]}
+    elif os.path.exists(_draft_path(exam_id)):
+        with open(_draft_path(exam_id), encoding="utf-8") as f:
+            base = json.load(f)
+    else:
+        base = {"answers": {}, "points": {}, "default_points": 1.0}
+    missing = [q for q in range(1, n + 1) if not base["answers"].get(str(q))]
+    return base | {"complete": key is not None, "missing": missing, "num_questions": n}
+
+
+def merge_answer_key(exam_id: str, answers: dict[Any, Any], points: dict[Any, Any] | None = None,
+                     default_points: float | None = None, allowed: set[int] | None = None) -> dict[str, Any]:
+    """일부 문항의 정답·배점만 저장 (보낸 문항만 바꾸고 나머지는 그대로).
+
+    매개변수:
+        answers: {문항: 정답} (예: {"11": 2, "12": [1, 3]}). 빈 값은 '입력 지우기'
+        points: {문항: 배점}. 빈 값(None, "")은 기본 배점으로 되돌리기
+        default_points: 기본 배점. 모든 문항을 고칠 수 있는 사람(allowed=None)만 바꿀 수 있음
+        allowed: 이 사람이 고칠 수 있는 문항 번호 집합. None이면 모든 문항 (소유자·관리자)
+    반환:
+        get_key_draft() 와 같은 형식 (complete=True 면 정답표가 완성돼 저장됨)
+    예외:
+        PermissionError: 맡지 않은 문항을 고치려 함
+        AnswerKeyError: 선지 범위 밖, 완성된 정답표에서 정답을 지우려 함, 음수 배점
+    """
+    exam, _ = _exam_and_layout(exam_id)
+    n, c = exam["num_questions"], exam["num_choices"]
+    cur = get_key_draft(exam_id)
+    complete = cur["complete"]
+    ans = dict(cur["answers"])
+    pts = dict(cur["points"])
+    dflt = cur["default_points"]
+
+    def check_q(q: Any) -> int:
+        qi = int(q)
+        if not 1 <= qi <= n:
+            raise AnswerKeyError(f"{qi}번은 문항 범위(1~{n}) 밖입니다")
+        if allowed is not None and qi not in allowed:
+            raise PermissionError(f"{qi}번은 내가 맡은 문항이 아닙니다")
+        return qi
+
+    for q, v in (answers or {}).items():
+        qi = check_q(q)
+        choice = parse_choices(v)
+        bad = [x for x in choice if not 1 <= x <= c]
+        if bad:
+            raise AnswerKeyError(f"{qi}번 정답 {bad}이(가) 선지 범위(1~{c}) 밖입니다")
+        if choice:
+            ans[str(qi)] = choice
+        elif complete:
+            raise AnswerKeyError(f"정답표가 완성된 뒤에는 정답을 비울 수 없습니다 ({qi}번)")
+        else:
+            ans.pop(str(qi), None)
+    for q, v in (points or {}).items():
+        qi = check_q(q)
+        if v is None or v == "":
+            pts.pop(str(qi), None)
+        elif float(v) < 0:
+            raise AnswerKeyError(f"{qi}번 배점이 음수입니다")
+        else:
+            pts[str(qi)] = float(v)
+    if default_points is not None and float(default_points) != float(dflt):
+        if allowed is not None:
+            raise PermissionError("기본 배점은 시험 소유자만 바꿀 수 있습니다")
+        dflt = float(default_points)
+
+    if all(ans.get(str(q)) for q in range(1, n + 1)):
+        set_answer_key(exam_id, ans, pts, dflt)             # 다 찼으면 진짜 정답표로 저장 (검사 포함)
+    else:
+        with open(_draft_path(exam_id), "w", encoding="utf-8") as f:
+            json.dump({"answers": ans, "points": pts, "default_points": dflt}, f, ensure_ascii=False, indent=1)
+    return get_key_draft(exam_id)
+
+
+def section_scores(items: list[dict[str, Any]], sections: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """채점 결과 문항 목록 → 범위(과목)별 소계.
+
+    반환:
+        [{"name": "물리", "from": 1, "to": 10, "score": 7.0, "total": 10.0, "pending": 1}, ...]
+    """
+    out = []
+    for sec in sections:
+        its = [it for it in items if sec["from"] <= it["q"] <= sec["to"]]
+        out.append({"name": sec["name"], "from": sec["from"], "to": sec["to"],
+                    "score": sum(it["earned"] for it in its), "total": sum(it["points"] for it in its),
+                    "pending": sum(1 for it in its if it["result"] == "pending")})
+    return out
+
+
+def _add_section_sheet(path: str, records: list[dict[str, Any]], sections: list[dict[str, Any]]) -> None:
+    """채점 결과 엑셀에 '과목별 점수' 시트 추가 (문항 범위가 있을 때만)."""
+    from openpyxl import load_workbook
+    from openpyxl.styles import Font
+    wb = load_workbook(path)
+    ws = wb.create_sheet("과목별 점수", 1)
+    head = ["학번", "사진 파일", "상태"] + [f"{s['name']} ({s['from']}~{s['to']}번)" for s in sections] + ["총점"]
+    ws.append(head)
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+    for r in sorted(records, key=lambda x: (x.get("student_id") or "~", x.get("source") or "")):
+        if not r.get("items"):
+            ws.append([r.get("student_id") or "", r.get("source") or "", r.get("status")])
+            continue
+        secs = section_scores(r["items"], sections)
+        ws.append([r.get("student_id") or "", r.get("source") or "", r.get("status")]
+                  + [f"{s['score']:g} / {s['total']:g}" + (f" (검수 {s['pending']})" if s["pending"] else "") for s in secs]
+                  + [f"{r.get('confirmed_score', 0):g} / {r.get('total_points', 0):g}"])
+    for i, w in enumerate([14, 22, 12] + [18] * len(sections) + [10], start=1):
+        ws.column_dimensions[ws.cell(1, i).column_letter].width = w
+    wb.save(path)
+
+
 # ---------------- P4 채점 → P5 엑셀 ----------------
 def grade_sheets(exam_id: str, key: AnswerKey | None = None) -> list[dict[str, Any]]:
     """저장된 판독 결과(P3) + 최신 정답표 + 검수 수정값 → 답안지별 채점 결과(P4) 목록.
@@ -453,7 +634,7 @@ def grade_sheets(exam_id: str, key: AnswerKey | None = None) -> list[dict[str, A
     out = []
     for rec in list_sheets(exam_id):
         if rec["status"] != flow.READ:
-            # 정렬 실패 → '재촬영 필요' 행 (error에 실패 사유)
+            # 정렬 실패·과노출 → '재촬영 필요' 행 (error에 실패 사유)
             g = retake_record(rec["source"], rec.get("error") or "")
         else:
             # 저장된 검수 수정값의 문항 번호("7")를 채점 함수가 쓰는 정수(7)로 바꿈
@@ -483,4 +664,8 @@ def export_results(exam_id: str, out_path: str | None = None) -> str:
         raise ValueError("정답표가 없습니다. 먼저 정답표를 입력하세요")
     records = grade_sheets(exam_id, key)
     path = out_path or os.path.join(_exam_dir(exam_id), "results.xlsx")
-    return flow.step_export(records, key, service.get_exam(exam_id), path)                 # P5
+    path = flow.step_export(records, key, service.get_exam(exam_id), path)                 # P5
+    sections = access.get_access(exam_id).get("sections") or []
+    if sections:
+        _add_section_sheet(path, records, sections)                                        # 과목별 소계 시트
+    return path

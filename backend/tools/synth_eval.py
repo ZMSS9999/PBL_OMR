@@ -47,6 +47,9 @@
   --shard   : "i/n" 형식. 전체 작업을 n조각으로 나눠 i번째 조각만 처리하고 part_i.pkl로 저장 (i는 0부터)
   --merge   : 붙이면 사진 처리 없이 <out>/part_*.pkl 조각들을 합쳐서 결과 파일만 작성
   --pipeline: 붙이면 데이터셋 어댑터 대신 실제 파이프라인(align() + 우리 layout)으로 정렬·판독
+  --names   : 평가할 json 목록 파일 (줄마다 landscape/00001.json). 가공 원본만 따로 평가할 때
+  --ref     : 가공 데이터셋 평가 때 양식 정보를 잴 원본 데이터셋 폴더 (synth_augment.py 참고)
+  --method  : 판독 방식. darkness(잉크 농도 방식, 기본) / fill(이전 방식, 비교용)
 
 [결과 확인]
   터미널 출력
@@ -271,7 +274,8 @@ def process(args):
     t0 = time.perf_counter()
     cond = d["condition"]
     base = {"image": d["image"], "orientation": d["orientation"], "sheet": d["sheet_id"],
-            "angle": cond["angle"], "lighting": cond["lighting"], "shadow": cond["shadow"]}
+            "angle": cond["angle"], "lighting": cond["lighting"], "shadow": cond["shadow"],
+            "augment": cond.get("augment")}   # 가공 데이터셋(synth_augment.py)의 가공 내용, 원본은 None
     if img is None:
         return {**base, "aligned": False, "markers": [], "align_err_px": None, "ms": None, "rows": []}
     if prof.get("pipeline"):
@@ -284,15 +288,18 @@ def process(args):
             return {**base, "aligned": False, "markers": res.found_ids, "align_err_px": None, "ms": None,
                     "rows": [], "note": f"방향 오판별 {res.orientation}"}
         warped, found = res.warped, res.found_ids
+        qual = {"blur_var": res.blur_var, "reproj_err_px": res.reproj_err_px}   # 재촬영 기준 실험용 품질 값
         k = F.CANONICAL_DPI / DPI                    # 템플릿 px(192dpi) → 정렬 이미지 px(200dpi) 배율
         H = np.diag([1 / k, 1 / k, 1.0]) @ res.H     # 사진 → 템플릿 px (오차 계산을 기본 방식과 같은 단위로)
-        read = read_sheet(warped, prof["layout"])    # 기준값·해상도(200dpi) 모두 기본값
+        read = read_sheet(warped, prof["layout"], ReadConfig(method=prof.get("method", "darkness")))   # 해상도 200dpi 기본값
     else:
         warped, H, found = align_synth(img, prof)
+        g0 = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        qual = {"blur_var": float(cv2.Laplacian(g0, cv2.CV_64F).var()), "reproj_err_px": None}   # align.py와 같은 선명도 계산
         if warped is None or H is None:
             return {**base, "aligned": False, "markers": found, "align_err_px": None, "ms": None, "rows": []}
         # P3 판독: 기준값은 기본값 그대로, 해상도만 데이터셋 템플릿에 맞춰 192dpi
-        read = read_sheet(warped, prof["layout"], ReadConfig(dpi=DPI))
+        read = read_sheet(warped, prof["layout"], ReadConfig(dpi=DPI, method=prof.get("method", "darkness")))
     ms = (time.perf_counter() - t0) * 1000
     # 정렬 오차: 칸 중심을 (우리 H의 역) vs (라벨 H)로 사진에 찍었을 때 거리
     centers = np.array([[c["center_mm"][0] / PX2MM, c["center_mm"][1] / PX2MM]
@@ -311,10 +318,15 @@ def process(args):
         outcome = "review" if pred is None else ("correct" if sorted(pred) == exp else "wrong")
         inks = {op["option"]: op["ink"] for op in q["options"]}
         rows.append({"q": q["question"], "case": q["case"], "expected": exp, "pred": pred, "status": r["status"],
-                     "outcome": outcome, "fill": r["fill"], "ink": [inks[k] for k in sorted(inks)]})
+                     "outcome": outcome, "fill": r["fill"], "ink": [inks[k] for k in sorted(inks)],
+                     "reason": r.get("reason", ""), "cov": r.get("cov"), "ring": r.get("ring"),
+                     "lpc": r.get("local_contrast")})   # lpc: 문항 주변 인쇄 잉크 대비 (부분 반사 실험용)   # cov·ring: 신뢰도 실험용
     is_original = "_" not in os.path.basename(jpath)      # 조건 없는 정면 원본 → P4·P5용으로 판독 결과 보관
     return {**base, "aligned": True, "markers": found, "align_err_px": float(err.mean()),
             "align_err_max_px": float(err.max()), "ms": ms, "rows": rows, "read": read if is_original else None,
+            "retake": bool(read["summary"].get("retake", False)),   # 과노출 → 재촬영 안내 대상 사진
+            "print_contrast": read["summary"].get("print_contrast"),  # 인쇄 잉크 대비 (밝기 품질 값)
+            **qual,
             "key": {q["question"]: q["option"] for q in d["questions"]}}
 
 
@@ -386,6 +398,28 @@ def summarize(results):
     out["by_angle"] = table(lambda r, x: r["angle"])
     out["by_lighting"] = table(lambda r, x: r["lighting"])
     out["by_shadow"] = table(lambda r, x: r["shadow"])
+    out["by_case_lighting"] = table(lambda r, x: f'{x["case"]}/{r["lighting"]}')
+    # 재촬영 안내(과노출) 반영: 재촬영 대상 사진 수 + 나머지 사진만으로 다시 집계
+    # (재촬영 대상은 학생이 다시 찍어 올리므로 문항 검수·오판독에 넣지 않음)
+    # 예전 결과(pkl)에 retake 키가 없으면 문항 이유 "overexposed"가 있는 사진을 대상으로 봄
+    def _retake(r):
+        return r.get("retake", any(x.get("reason") == "overexposed" for x in r["rows"]))
+    rt = [r for r in aligned if _retake(r)]
+    out["retake"] = {"photos": len(rt), "photos_%": pct(len(rt), len(aligned)),
+                     "by_lighting": dict(Counter(r["lighting"] for r in rt))}
+    rows_all = rows
+    rows = [(r, x) for r, x in rows_all if not _retake(r)]
+    t2 = Counter(x["outcome"] for _, x in rows)
+    out["overall_after_retake"] = {k: t2[k] for k in ("correct", "review", "wrong")} | {
+        "correct_%": pct(t2["correct"], len(rows)), "review_%": pct(t2["review"], len(rows)),
+        "wrong_%": pct(t2["wrong"], len(rows))}
+    out["by_case_after_retake"] = table(lambda r, x: x["case"])
+    rows = rows_all
+    # 잉크 농도 방식의 판정 이유별 개수 (유형/이유 → 결과)
+    rs = defaultdict(Counter)
+    for _, x in rows:
+        rs[f'{x["case"]}/{x.get("reason", "") or "-"}'][x["outcome"]] += 1
+    out["by_reason"] = {k: dict(v) for k, v in sorted(rs.items())}
     # 오판독 내용: (유형, 기대 → 읽은 답 상태)
     wrong = Counter((x["case"], "multi" if x["pred"] and len(x["pred"]) > 1 else ("blank" if x["pred"] == [] else "other"))
                     for _, x in rows if x["outcome"] == "wrong")
@@ -475,12 +509,16 @@ def main():
     """
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", required=True, help="synthetic_dataset 폴더 (landscape/, portrait/ 포함)")
+    ap.add_argument("--names", default="", help="평가할 json 목록 파일 (줄마다 'landscape/00001.json' 형식). 없으면 전부")
+    ap.add_argument("--ref", default="", help="양식 정보(칸·마커 위치)를 잴 원본 데이터셋 폴더. 가공 데이터셋 평가 때 원본 폴더를 줌 (기본: --data)")
     ap.add_argument("--out", required=True)
     ap.add_argument("--workers", type=int, default=2)
     ap.add_argument("--limit", type=int, default=0, help="방향별 최대 장 수 (0 = 전부)")
     ap.add_argument("--shard", default="", help="i/n: 전체의 n분의 1만 처리하고 part_i.pkl로 저장")
     ap.add_argument("--merge", action="store_true", help="part_*.pkl을 합쳐서 결과 파일 작성")
     ap.add_argument("--pipeline", action="store_true", help="실제 파이프라인(align + 우리 layout)으로 평가")
+    ap.add_argument("--method", default="darkness", choices=["darkness", "fill"],
+                    help="판독 방식: darkness(잉크 농도 방식, 기본) / fill(이전 방식)")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
     # --merge: 조각 파일(part_*.pkl)만 읽어서 합친 뒤 결과 파일 작성
@@ -499,9 +537,13 @@ def main():
             prof = {"orientation": o, "pipeline": True,
                     "layout": compute_layout(SheetSpec(num_questions=45, num_choices=5, orientation=o))}
         else:
-            prof = build_profile(a.data, o)
+            prof = build_profile(a.ref or a.data, o)   # 가공본은 정면 원본이 없으므로 원본 폴더에서 잼
+        prof["method"] = a.method
         files = sorted(glob.glob(os.path.join(a.data, o, "*.json")))
         files = [f for f in files if os.path.exists(f[:-5] + ".jpg")]
+        if a.names:   # 목록 파일에 있는 사진만 (예: 가공 원본과 같은 원본 사진만 평가)
+            keep = {ln.strip() for ln in open(a.names, encoding="utf-8") if ln.strip()}
+            files = [f for f in files if f"{o}/{os.path.basename(f)}" in keep]
         if a.limit:
             files = files[:a.limit]
         jobs += [(f, prof) for f in files]

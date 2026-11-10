@@ -42,7 +42,7 @@
 
 [주요 함수/클래스]
   - WrongSheetError        : 다른 시험·다른 방향 답안지일 때 P2에서 나는 예외
-  - READ / ALIGN_FAILED / WRONG_EXAM : SheetResult.status 값
+  - READ / ALIGN_FAILED / WRONG_EXAM / TOO_BRIGHT / TOO_BLURRY : SheetResult.status 값
   - SheetResult            : 사진 한 장의 단계별 결과 묶음 (+ align_summary(): 저장용 요약)
   - step_align()           : P1 정렬
   - step_check_exam()      : P2 시험 확인
@@ -85,6 +85,9 @@ class WrongSheetError(ValueError):
 READ = "read"                    # P1~P3 통과, 판독 결과 있음
 ALIGN_FAILED = "align_failed"    # P1 실패 → 재촬영 필요
 WRONG_EXAM = "wrong_exam"        # P2 실패 → 이 시험 결과에 넣지 않음
+TOO_BRIGHT = "too_bright"        # P3에서 과노출·부분 반사 판정 → 재촬영 필요 (판독 결과는 참고용으로 남김)
+TOO_BLURRY = "too_blurry"        # P1 뒤 선명도(blur_var) < ReadConfig.blur_min → 재촬영 필요 (판독 안 함)
+BLURRY_MSG = "사진이 흐림 (초점이 안 맞았거나 흔들림). 초점을 맞추고 흔들리지 않게 다시 찍어 주세요"
 
 
 @dataclass
@@ -95,7 +98,7 @@ class SheetResult:
     예: P1에서 실패하면 status="align_failed", error=실패 사유, align/read/grade는 모두 None
     """
     source: str                                  # 파일명 등 사진 출처
-    status: str = READ                           # READ / ALIGN_FAILED / WRONG_EXAM 중 하나
+    status: str = READ                           # READ / ALIGN_FAILED / WRONG_EXAM / TOO_BRIGHT / TOO_BLURRY 중 하나
     error: str | None = None                     # 실패 사유 (학생 안내 문구로도 사용)
     notes: list[str] = field(default_factory=list)   # 경고 메모 (P1 경고 + P2 경고. 예: "QR을 읽지 못해 ...")
     align: AlignResult | None = None             # P1 결과
@@ -253,7 +256,14 @@ def run_photo(photo_bgr: np.ndarray, exam: dict[str, Any], layout: dict[str, Any
     except WrongSheetError as e:
         r.status, r.error = WRONG_EXAM, str(e)
         return r
+    blur_min = (cfg or ReadConfig()).blur_min
+    if blur_min and r.align.blur_var < blur_min:                # 흐린 사진 → 판독하지 않고 재촬영 안내
+        r.status, r.error = TOO_BLURRY, f"{BLURRY_MSG} (선명도 {r.align.blur_var:.0f} < {blur_min:.0f})"
+        return r
     r.read = step_read(r.align.warped, layout, cfg)             # P3 (P1의 warped 사용)
+    if r.read["summary"].get("retake"):                        # 과노출 → 채점하지 않고 재촬영 안내
+        r.status, r.error = TOO_BRIGHT, r.read["summary"].get("retake_reason") or "사진이 너무 밝음"
+        return r
     if key is not None:
         r.grade = step_grade(r.read, key)                       # P4 (P3의 출력 사용)
         r.grade["source"] = source                              # 엑셀에서 어느 사진의 결과인지 표시용
@@ -265,7 +275,7 @@ def run_batch(photos: Iterable[tuple[str, np.ndarray]], exam: dict[str, Any], la
               key: AnswerKey, out_xlsx: str | None = None,
               cfg: ReadConfig | None = None) -> tuple[list[SheetResult], str | None]:
     """사진 여러 장 → run_photo 반복 → P5 엑셀. (이름, 이미지) 묶음을 받음.
-    다른 시험 답안지(WRONG_EXAM)는 결과에서 빼고, 정렬 실패는 '재촬영 필요' 행으로 엑셀에 남김.
+    다른 시험 답안지(WRONG_EXAM)는 결과에서 빼고, 정렬 실패·과노출(TOO_BRIGHT)·흐림(TOO_BLURRY)은 '재촬영 필요' 행으로 엑셀에 남김.
 
     매개변수:
         photos: (이름, 사진) 튜플들. 예: [("a.jpg", img_a), ("b.jpg", img_b)]
@@ -287,7 +297,7 @@ def run_batch(photos: Iterable[tuple[str, np.ndarray]], exam: dict[str, Any], la
     for r in results:
         if r.status == READ and r.grade is not None:
             grades.append(r.grade)
-        elif r.status == ALIGN_FAILED:
+        elif r.status in (ALIGN_FAILED, TOO_BRIGHT, TOO_BLURRY):
             grades.append(retake_record(r.source, r.error or ""))
     path = step_export(grades, key, exam, out_xlsx) if out_xlsx else None   # P5 (P4의 출력 목록 사용)
     return results, path
