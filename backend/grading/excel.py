@@ -7,6 +7,7 @@
 [시트 구성]
   1. 학생별 점수표 : 학번, 상태(확정 / 검수 대기 / 재촬영 필요), 확정 점수, 최고 가능 점수, 정답·오답 수
   2. 문항별 결과   : 학생 × 문항 표. 칸에 읽은 답, 색으로 정답/오답/무응답/복수/검수 대기 구분
+  2-2. 학생별 상세 : 학생 × 문항을 한 줄씩. 학생 답, 정답, 정오, 배점, 선지별 채움 비율 (필터로 개별 조회)
   3. 문항별 정답률 : 문항별 정답률과 선지별 선택 수 (확정된 응답만 집계)
   4. 검수 대기     : 사람이 확인해야 할 문항·학번 목록과 칸별 채움 비율
   5. 정답표        : 채점에 쓴 정답과 배점
@@ -143,9 +144,9 @@ def write_results_xlsx(path: str, records: list[dict[str, Any]], key: AnswerKey,
              ("read"가 있으면 '검수 대기' 시트에 칸별 채움 비율이 나옴)
     exam   : 시험 정보 (제목줄에 시험명·과목명 표시용, 없어도 됨)
 
-    답안지를 _sort_key() 순서로 정렬한 뒤 시트 5개(학생별 점수표, 문항별 결과, 문항별 정답률,
+    답안지를 _sort_key() 순서로 정렬한 뒤 시트 6개(학생별 점수표, 문항별 결과, 학생별 상세, 문항별 정답률,
     검수 대기, 정답표)를 차례로 만들고 path에 저장함. 저장 폴더가 없으면 만듦.
-    '문항별 결과'와 '문항별 정답률'에는 재촬영 필요 답안지를 빼고(graded) 넣음.
+    '문항별 결과'·'학생별 상세'·'문항별 정답률'에는 재촬영 필요 답안지를 빼고(graded) 넣음.
 
     매개변수:
         path: 저장할 엑셀 경로 (예: "결과.xlsx")
@@ -248,6 +249,39 @@ def write_results_xlsx(path: str, records: list[dict[str, Any]], key: AnswerKey,
              "칸 표기: 숫자=읽은 답, '-'=무응답, '?'=판정 보류, '2,5'=복수 응답, 굵은 밑줄=검수에서 수정")
     _widths(ws2, {1: 14, 2: 11, 3: 9, **{c: 5.5 for c in range(4, nq + 4)}})
     ws2.freeze_panes = "D3"           # 머리글·정답 행(1~2행)과 학번·상태·점수 열(A~C) 고정
+
+    # ---------- 2-2. 학생별 상세 ----------
+    # 학생 한 명의 문항 하나가 한 줄: 학생 답 / 정답 / 정오 / 배점 / 선지별 채움 비율 (필터로 학생·문항별 조회)
+    wsd = wb.create_sheet("학생별 상세")
+    kc = key.num_choices
+    _header(wsd, 1, ["학번", "상태", "파일", "문항", "학생 답", "정답", "결과", "배점", "획득"]
+            + [f"{c}번 채움" for c in range(1, kc + 1)])
+    for r in graded:
+        sid = r.get("student_id") or r.get("student_id_raw") or ""
+        mcq = {q["q"]: q for q in (r.get("read") or {}).get("mcq", [])}   # 문항 번호 → 판독 원본 (선지별 채움 비율)
+        for it in r["items"]:
+            fills = mcq.get(it["q"], {}).get("fill") or []
+            wsd.append([sid, r["status"], r.get("source", ""), it["q"], _ans_text(it["answer"]), _ans_text(it["key"]),
+                        RESULT_KO[it["result"]], it["points"], it["earned"]]
+                       + [fills[c] if c < len(fills) else None for c in range(kc)])
+            rr = wsd.max_row
+            for col in range(1, 10 + kc):
+                wsd.cell(rr, col).border = BOX
+                if col != 3:
+                    wsd.cell(rr, col).alignment = CENTER
+            wsd.cell(rr, 7).fill = FILL[it["result"]]                    # 결과 칸: 정답 초록 / 오답 빨강 ...
+            for c in range(kc):                                          # 선지별 채움 비율 칸
+                cell = wsd.cell(rr, 10 + c)
+                cell.number_format = "0%"
+                if (c + 1) in it["key"]:
+                    cell.fill = FILL["correct"]                          # 정답 선지 = 초록
+                if (c + 1) in (it["answer"] or []):
+                    cell.font = Font(bold=True, underline="single")      # 학생이 고른(읽힌) 선지 = 굵은 밑줄
+    last = wsd.max_row
+    wsd.cell(last + 2, 1, "채움 칸: 초록 = 정답 선지, 굵은 밑줄 = 학생이 고른 선지 (검수에서 고친 답 포함). 필터로 학번·문항·결과별 조회")
+    wsd.auto_filter.ref = f"A1:{get_column_letter(9 + kc)}{last}"
+    _widths(wsd, {1: 14, 2: 11, 3: 26, 4: 6, 5: 9, 6: 7, 7: 10, 8: 6, 9: 6, **{c: 9 for c in range(10, 10 + kc)}})
+    wsd.freeze_panes = "E2"           # 머리글 행과 학번·상태·파일·문항 열 고정
 
     # ---------- 3. 문항별 정답률 ----------
     ws3 = wb.create_sheet("문항별 정답률")

@@ -64,6 +64,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
+import importlib
+
 import numpy as np
 
 from grading.answer_key import AnswerKey
@@ -71,6 +73,20 @@ from grading.excel import write_results_xlsx
 from grading.score import grade_sheet, retake_record
 from pipeline.align import AlignError, AlignResult, align
 from pipeline.read import ReadConfig, read_sheet
+
+
+# 이중 검증(규칙 기반 + CNN) 방식 선택: "v2" = dual_verify_v2 / None = 끔 (팀원 방식 그대로)
+DUAL_VERIFY = "v2"
+
+
+def _dual_verify_module():
+    """DUAL_VERIFY 설정에 맞는 이중 검증 모듈을 돌려줌 (끄면 None). 선택한 모듈만 불러옴 (끄면 torch 등도 불러오지 않음)."""
+    if DUAL_VERIFY is None:
+        return None
+    names = {"v2": "dual_verify_v2"}
+    if DUAL_VERIFY not in names:
+        raise ValueError(f"DUAL_VERIFY 값이 잘못됨: {DUAL_VERIFY!r} (v2 / None 중 하나)")
+    return importlib.import_module(names[DUAL_VERIFY])
 
 
 class WrongSheetError(ValueError):
@@ -264,6 +280,9 @@ def run_photo(photo_bgr: np.ndarray, exam: dict[str, Any], layout: dict[str, Any
     if r.read["summary"].get("retake"):                        # 과노출 → 채점하지 않고 재촬영 안내
         r.status, r.error = TOO_BRIGHT, r.read["summary"].get("retake_reason") or "사진이 너무 밝음"
         return r
+    verifier = _dual_verify_module()                            # P3 보강: CNN 이중 검증 (DUAL_VERIFY 설정에 따라 v2 / 끔). 재촬영 판정 뒤에 함
+    if verifier is not None:
+        r.read = verifier.verify_sheet(r.read, r.align.warped, layout)
     if key is not None:
         r.grade = step_grade(r.read, key)                       # P4 (P3의 출력 사용)
         r.grade["source"] = source                              # 엑셀에서 어느 사진의 결과인지 표시용

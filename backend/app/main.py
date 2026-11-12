@@ -756,10 +756,14 @@ def get_results(exam_id: str, user: dict = Depends(current_user)):
     sections = access.get_access(exam_id).get("sections") or []
     out = []
     for r in records:
-        r = {k: v for k, v in r.items() if k != "read"}
-        if sections and r.get("items"):
-            r["sections"] = gs.section_scores(r["items"], sections)     # 과목별 소계
-        out.append(r)
+        # 용량이 큰 "read"는 빼되, 문항별 선지 채움 비율(fill)만 items 에 옮겨 담음 → 결과 화면의 학생별 상세에서 사용
+        d = {k: v for k, v in r.items() if k != "read"}
+        mcq = {m["q"]: m for m in (r.get("read") or {}).get("mcq", [])}     # 문항 번호 → 판독 원본 한 문항
+        if "items" in d:
+            d["items"] = [{**it, "fill": (mcq.get(it["q"]) or {}).get("fill")} for it in d["items"]]
+        if sections and d.get("items"):
+            d["sections"] = gs.section_scores(d["items"], sections)         # 과목별 소계
+        out.append(d)
     return out
 
 
@@ -768,7 +772,7 @@ def get_results_xlsx(exam_id: str, user: dict = Depends(current_user)):
     """채점 결과 엑셀 내려받기 (GET /api/exams/{exam_id}/results.xlsx) — 파이프라인 P4 + P5.
 
     다시 채점(P4)한 뒤 엑셀(P5)을 시험 폴더의 results.xlsx 로 저장하고 그 파일을 보냄.
-    엑셀 시트: 학생별 점수표 / 문항별 결과 / 문항별 정답률 / 검수 대기 / 정답표.
+    엑셀 시트: 학생별 점수표 / 문항별 결과 / 학생별 상세 / 문항별 정답률 / 검수 대기 / 정답표.
 
     매개변수:
         exam_id: 시험 ID (예: "EX-20261001-8C7353")

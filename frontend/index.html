@@ -225,6 +225,18 @@
   .qcard.flag { border: 2px solid var(--warn); background: #fff; }
   .qcard .qn { width: 46px; font-weight: 700; }
   .qcard .why { font-size: 12px; color: var(--ink); font-weight: 700; width: 82px; }
+  /* 결과 화면 학생별 상세의 선지별 채움 막대 */
+  .fills { display: flex; gap: 6px; }
+  .fill { width: 34px; text-align: center; font-size: 11px; color: var(--muted); }
+  .fill .bar { height: 30px; background: var(--gray-soft); border-radius: 4px; position: relative; overflow: hidden; margin-bottom: 2px; }
+  .fill .bar > i { position: absolute; left: 0; right: 0; bottom: 0; background: #9aa6bb; }
+  .fill .bar > i.hi { background: var(--ink); }
+  /* 결과 화면 학생별 상세: 선지 번호 표시 (검은 원 = 학생이 고른 선지, 초록 테두리 = 정답) */
+  .fill .cn { width: 18px; height: 18px; line-height: 18px; margin: 3px auto 0; border-radius: 50%; font-size: 11px; font-weight: 700; color: var(--muted); }
+  .fill.picked .cn { background: var(--ink); color: #fff; }
+  .fill.key .cn { box-shadow: 0 0 0 2px var(--ok); }
+  .qcard .ansbox { margin-left: auto; text-align: right; font-size: 13px; line-height: 1.5; min-width: 120px; }
+  .qcard.res-wrong { border-color: #f1b3b3; background: #fffafa; }
   .sid { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
   .sid input { width: 160px; font-size: 16px; font-weight: 700; letter-spacing: .08em; }
   .photo { width: 100%; border: 1px solid var(--line); border-radius: 8px; }
@@ -1239,7 +1251,7 @@ async function pageResults() {
     <div class="card">
       <h2>학생별 점수</h2>
       <div class="tablewrap"><table class="t">
-        <thead><tr><th>학번</th><th>사진 파일</th><th>상태</th>${secHead}<th class="num">총점</th><th class="num">맞음</th><th class="num">틀림</th><th class="num">무응답</th><th class="num">복수 표시</th></tr></thead>
+        <thead><tr><th>학번</th><th>사진 파일</th><th>상태</th>${secHead}<th class="num">총점</th><th class="num">맞음</th><th class="num">틀림</th><th class="num">무응답</th><th class="num">복수 표시</th><th></th></tr></thead>
         <tbody>${sorted.map(r => `<tr>
           <td class="mono">${esc(r.student_id || "-")}</td>
           <td class="small">${esc(r.source)}</td>
@@ -1248,14 +1260,57 @@ async function pageResults() {
           <td class="num"><b>${r.status === "확정" ? fmtNum(r.score) : r.status === "검수 대기" ? `${fmtNum(r.confirmed_score)}~${fmtNum(r.max_possible)}` : "-"}</b>${r.total_points != null ? `<span class="muted"> / ${fmtNum(r.total_points)}</span>` : ""}</td>
           <td class="num">${r.counts?.correct ?? "-"}</td><td class="num">${r.counts?.wrong ?? "-"}</td>
           <td class="num">${r.counts?.blank ?? "-"}</td><td class="num">${r.counts?.multi ?? "-"}</td>
+          <td style="text-align:right">${r.status === "재촬영 필요" ? "" : `<button type="button" class="btn" data-detail="${sorted.indexOf(r)}" style="padding:4px 12px">상세</button>`}</td>
         </tr>`).join("")}</tbody></table></div>
     </div>
+    <div id="studentDetail"></div>
     <div class="card">
       <h2>문항별 정답률</h2>
       <div class="rates">${rates.map(x => `<div class="rate"><b>${x.q}번</b>
         <div class="track"><div class="${x.rate != null && x.rate < 0.4 ? "low" : ""}" style="width:${x.rate == null ? 0 : Math.round(x.rate * 100)}%"></div></div>
         <span class="num" style="text-align:right">${x.rate == null ? "-" : Math.round(x.rate * 100) + "%"}</span></div>`).join("")}</div>
     </div>`;
+
+  // ---- 학생별 상세: 학생 한 명의 문항별 답·정오·선지별 채움 비율 (검수 화면과 같은 막대 모양) ----
+  const RES = { correct: ["정답", "ok"], wrong: ["오답", "bad"], multi: ["복수 표시", "warn"], blank: ["무응답", "gray"], pending: ["검수 대기", "warn"] };
+  const ansTxt = (a) => a == null ? "판정 보류" : a.length ? a.join(", ") : "무응답";
+  let detailSel = null, detailFilter = "all";          // 지금 열린 학생(sorted 의 위치), 보기 필터: all / bad(맞은 문항 숨김)
+  function drawDetail() {
+    const box = $("studentDetail");
+    if (detailSel == null) { box.innerHTML = ""; return; }
+    const r = sorted[detailSel];
+    const its = (r.items || []).filter(it => detailFilter === "all" || it.result !== "correct");
+    const cnt = r.counts || {};
+    box.innerHTML = `<div class="card">
+      <div class="row" style="margin-bottom:6px">
+        <h2 style="margin:0">${esc(r.student_id || r.student_id_raw || "학번 미확인")} <span class="muted small" style="font-weight:400">${esc(r.source)}</span></h2>
+        ${statusPill(r)}
+        <b>${r.status === "확정" ? fmtNum(r.score) : `${fmtNum(r.confirmed_score)}~${fmtNum(r.max_possible)}`}</b><span class="muted"> / ${fmtNum(r.total_points)}</span>
+        <button type="button" class="btn" id="detailClose" style="margin-left:auto;padding:4px 12px">닫기</button>
+      </div>
+      <p class="desc">정답 ${cnt.correct ?? 0} · 오답 ${cnt.wrong ?? 0} · 무응답 ${cnt.blank ?? 0} · 복수 표시 ${cnt.multi ?? 0} · 검수 대기 ${cnt.pending ?? 0}.
+        막대 = 칸을 칠한 정도(%), 검은 원 = 학생이 고른 선지, 초록 테두리 = 정답 선지입니다.</p>
+      <label class="small" style="display:inline-flex;gap:6px;align-items:center;margin-bottom:10px"><input type="checkbox" id="detailWrongOnly" ${detailFilter === "bad" ? "checked" : ""}> 맞은 문항 숨기기 (틀린·무응답·확인 필요 문항만 보기)</label>
+      ${its.length ? its.map(it => {
+        const [label, cls] = RES[it.result] || [it.result, "gray"];
+        const a = it.answer || [], key = it.key || [];
+        return `<div class="qcard ${it.result === "pending" ? "flag" : ""} ${it.result === "wrong" ? "res-wrong" : ""}">
+          <span class="qn">${it.q}번</span>
+          <span class="pill ${cls}">${label}</span>
+          <div class="fills">${(it.fill || []).map((f, i) => `<div class="fill ${a.includes(i + 1) ? "picked" : ""} ${key.includes(i + 1) ? "key" : ""}">
+            <div class="bar"><i class="${a.includes(i + 1) ? "hi" : ""}" style="height:${Math.round(f * 100)}%"></i></div>${Math.round(f * 100)}%<div class="cn">${i + 1}</div></div>`).join("")}</div>
+          <div class="ansbox">학생 답 <b>${esc(ansTxt(it.answer))}</b>${it.source === "review" ? ` <span class="pill gray" style="padding:0 7px;font-size:11px">검수 수정</span>` : ""}<br>
+            정답 <b>${esc(key.join(", "))}</b> · <span class="muted">${fmtNum(it.earned)}/${fmtNum(it.points)}점</span></div>
+        </div>`;
+      }).join("") : `<div class="empty small">표시할 문항이 없습니다 🎉</div>`}
+    </div>`;
+    $("detailClose").onclick = () => { detailSel = null; drawDetail(); };
+    $("detailWrongOnly").onchange = (ev) => { detailFilter = ev.target.checked ? "bad" : "all"; drawDetail(); };
+  }
+  $("view").querySelectorAll("[data-detail]").forEach(b => b.onclick = () => {
+    detailSel = Number(b.dataset.detail); drawDetail();
+    $("studentDetail").scrollIntoView({ behavior: "smooth", block: "start" });
+  });
 }
 
 // ---------------- 로그인 · 권한 ----------------
