@@ -225,6 +225,9 @@
   .qcard.flag { border: 2px solid var(--warn); background: #fff; }
   .qcard .qn { width: 46px; font-weight: 700; }
   .qcard .why { font-size: 12px; color: var(--ink); font-weight: 700; width: 82px; }
+  /* 검수 화면: 선지마다 채움 막대(위) + 번호 버튼(아래)을 한 열로 묶어서 막대와 버튼이 세로로 맞게 함 */
+  .chs { display: flex; gap: 6px; align-items: flex-end; flex: 1 1 100%; }
+  .chcol { display: flex; flex-direction: column; align-items: center; gap: 4px; }
   /* 결과 화면 학생별 상세의 선지별 채움 막대 */
   .fills { display: flex; gap: 6px; }
   .fill { width: 34px; text-align: center; font-size: 11px; color: var(--muted); }
@@ -1131,6 +1134,9 @@ async function pageReview() {
 
     function drawQ() {
       const qs = showAll ? read.mcq : flagged;
+      // 채움 막대를 진하게 칠하는 기준: 판독에 쓴 마킹 기준 (잉크 농도 방식이면 solid_min, 이전 방식이면 marked_min)
+      const rcfg = read.read_config || {};
+      const hiMin = (rcfg.method === "darkness" ? rcfg.solid_min : rcfg.marked_min) ?? 0.6;
       $("qlist").innerHTML = qs.map(m => {
         const a = cur[m.q] || [];
         const key = keyAns && keyAns[m.q];
@@ -1138,10 +1144,12 @@ async function pageReview() {
         return `<div class="qcard ${m.needs_review && !lock ? "flag" : ""}" data-q="${m.q}" ${lock ? `style="background:var(--soft)" title="내가 맡은 문항이 아닙니다"` : ""}>
           <span class="qn">${m.q}번${sectionOf(m.q) ? `<div class="small">${esc(sectionOf(m.q))}</div>` : ""}</span>
           ${m.needs_review ? `<span class="why">${READ_WHY[m.status] || "확인 필요"}</span>` : ""}
-          <div class="bubbles" style="margin-left:auto">${Array.from({ length: C }, (_, i) =>
-            `<button type="button" class="bub ${a.includes(i + 1) ? "on" : ""}" data-q="${m.q}" data-c="${i + 1}" ${lock ? "disabled" : ""}>${i + 1}</button>`).join("")}
-            <button type="button" class="btn nores ${decided.has(m.q) && !a.length ? "on" : ""}" data-q="${m.q}" style="padding:6px 10px" ${lock ? "disabled" : ""}>무응답</button></div>
-          ${key ? `<span class="small muted" style="width:62px;text-align:right">정답 ${key.join(",")}</span>` : ""}
+          ${key ? `<span class="small muted" style="margin-left:auto;text-align:right">정답 ${key.join(",")}</span>` : ""}
+          <div class="chs">${Array.from({ length: C }, (_, i) => { const f = (m.fill || [])[i] ?? 0;   /* 선지마다 채움 막대(위)와 번호 버튼(아래)을 한 열로 묶어 세로로 맞춤 */
+            return `<div class="chcol">
+              <div class="fill"><div class="bar"><i class="${f >= hiMin ? "hi" : ""}" style="height:${Math.round(f * 100)}%"></i></div>${Math.round(f * 100)}%</div>
+              <button type="button" class="bub ${a.includes(i + 1) ? "on" : ""}" data-q="${m.q}" data-c="${i + 1}" ${lock ? "disabled" : ""}>${i + 1}</button></div>`; }).join("")}
+            <div class="chcol"><button type="button" class="btn nores ${decided.has(m.q) && !a.length ? "on" : ""}" data-q="${m.q}" style="padding:6px 10px" ${lock ? "disabled" : ""}>무응답</button></div></div>
         </div>`;
       }).join("") || `<div class="empty small">확인할 문항이 없습니다</div>`;
     }
