@@ -1,0 +1,2346 @@
+{
+  "orientation": "landscape",
+  "slide_width_in": 11.6927,
+  "slide_height_in": 8.2674,
+  "aruco_markers": [
+    {
+      "aruco_id": 0,
+      "corner": "TL",
+      "center_x_norm": 0.044078,
+      "center_y_norm": 0.062343,
+      "left_norm": 0.013357,
+      "top_norm": 0.018892,
+      "width_norm": 0.061443,
+      "height_norm": 0.086902
+    },
+    {
+      "aruco_id": 1,
+      "corner": "TR",
+      "center_x_norm": 0.955031,
+      "center_y_norm": 0.062343,
+      "left_norm": 0.92431,
+      "top_norm": 0.018892,
+      "width_norm": 0.061443,
+      "height_norm": 0.086902
+    },
+    {
+      "aruco_id": 3,
+      "corner": "BR",
+      "center_x_norm": 0.955031,
+      "center_y_norm": 0.936398,
+      "left_norm": 0.92431,
+      "top_norm": 0.892947,
+      "width_norm": 0.061443,
+      "height_norm": 0.086902
+    },
+    {
+      "aruco_id": 2,
+      "corner": "BL",
+      "center_x_norm": 0.044078,
+      "center_y_norm": 0.936398,
+      "left_norm": 0.013357,
+      "top_norm": 0.892947,
+      "width_norm": 0.061443,
+      "height_norm": 0.086902
+    }
+  ],
+  "questions": [
+    {
+      "question": 1,
+      "options": [
+        {
+          "option": 1,
+          "center_x_norm": 0.32603,
+          "center_y_norm": 0.251439,
+          "left_norm": 0.319464,
+          "top_norm": 0.242153,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 2,
+          "center_x_norm": 0.344549,
+          "center_y_norm": 0.251439,
+          "left_norm": 0.337983,
+          "top_norm": 0.242153,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 3,
+          "center_x_norm": 0.363068,
+          "center_y_norm": 0.251439,
+          "left_norm": 0.356502,
+          "top_norm": 0.242153,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 4,
+          "center_x_norm": 0.381586,
+          "center_y_norm": 0.251439,
+          "left_norm": 0.375021,
+          "top_norm": 0.242153,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 5,
+          "center_x_norm": 0.400105,
+          "center_y_norm": 0.251439,
+          "left_norm": 0.393539,
+          "top_norm": 0.242153,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        }
+      ]
+    },
+    {
+      "question": 2,
+      "options": [
+        {
+          "option": 1,
+          "center_x_norm": 0.32603,
+          "center_y_norm": 0.292394,
+          "left_norm": 0.319464,
+          "top_norm": 0.283107,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 2,
+          "center_x_norm": 0.344549,
+          "center_y_norm": 0.292394,
+          "left_norm": 0.337983,
+          "top_norm": 0.283107,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 3,
+          "center_x_norm": 0.363068,
+          "center_y_norm": 0.292394,
+          "left_norm": 0.356502,
+          "top_norm": 0.283107,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 4,
+          "center_x_norm": 0.381586,
+          "center_y_norm": 0.292394,
+          "left_norm": 0.375021,
+          "top_norm": 0.283107,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 5,
+          "center_x_norm": 0.400105,
+          "center_y_norm": 0.292394,
+          "left_norm": 0.393539,
+          "top_norm": 0.283107,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        }
+      ]
+    },
+    {
+      "question": 3,
+      "options": [
+        {
+          "option": 1,
+          "center_x_norm": 0.32603,
+          "center_y_norm": 0.333348,
+          "left_norm": 0.319464,
+          "top_norm": 0.324062,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 2,
+          "center_x_norm": 0.344549,
+          "center_y_norm": 0.333348,
+          "left_norm": 0.337983,
+          "top_norm": 0.324062,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 3,
+          "center_x_norm": 0.363068,
+          "center_y_norm": 0.333348,
+          "left_norm": 0.356502,
+          "top_norm": 0.324062,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 4,
+          "center_x_norm": 0.381586,
+          "center_y_norm": 0.333348,
+          "left_norm": 0.375021,
+          "top_norm": 0.324062,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 5,
+          "center_x_norm": 0.400105,
+          "center_y_norm": 0.333348,
+          "left_norm": 0.393539,
+          "top_norm": 0.324062,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        }
+      ]
+    },
+    {
+      "question": 4,
+      "options": [
+        {
+          "option": 1,
+          "center_x_norm": 0.32603,
+          "center_y_norm": 0.374302,
+          "left_norm": 0.319464,
+          "top_norm": 0.365016,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 2,
+          "center_x_norm": 0.344549,
+          "center_y_norm": 0.374302,
+          "left_norm": 0.337983,
+          "top_norm": 0.365016,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 3,
+          "center_x_norm": 0.363068,
+          "center_y_norm": 0.374302,
+          "left_norm": 0.356502,
+          "top_norm": 0.365016,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 4,
+          "center_x_norm": 0.381586,
+          "center_y_norm": 0.374302,
+          "left_norm": 0.375021,
+          "top_norm": 0.365016,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 5,
+          "center_x_norm": 0.400105,
+          "center_y_norm": 0.374302,
+          "left_norm": 0.393539,
+          "top_norm": 0.365016,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        }
+      ]
+    },
+    {
+      "question": 5,
+      "options": [
+        {
+          "option": 1,
+          "center_x_norm": 0.32603,
+          "center_y_norm": 0.415256,
+          "left_norm": 0.319464,
+          "top_norm": 0.40597,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 2,
+          "center_x_norm": 0.344549,
+          "center_y_norm": 0.415256,
+          "left_norm": 0.337983,
+          "top_norm": 0.40597,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 3,
+          "center_x_norm": 0.363068,
+          "center_y_norm": 0.415256,
+          "left_norm": 0.356502,
+          "top_norm": 0.40597,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 4,
+          "center_x_norm": 0.381586,
+          "center_y_norm": 0.415256,
+          "left_norm": 0.375021,
+          "top_norm": 0.40597,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 5,
+          "center_x_norm": 0.400105,
+          "center_y_norm": 0.415256,
+          "left_norm": 0.393539,
+          "top_norm": 0.40597,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        }
+      ]
+    },
+    {
+      "question": 6,
+      "options": [
+        {
+          "option": 1,
+          "center_x_norm": 0.32603,
+          "center_y_norm": 0.45621,
+          "left_norm": 0.319464,
+          "top_norm": 0.446924,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 2,
+          "center_x_norm": 0.344549,
+          "center_y_norm": 0.45621,
+          "left_norm": 0.337983,
+          "top_norm": 0.446924,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 3,
+          "center_x_norm": 0.363068,
+          "center_y_norm": 0.45621,
+          "left_norm": 0.356502,
+          "top_norm": 0.446924,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 4,
+          "center_x_norm": 0.381586,
+          "center_y_norm": 0.45621,
+          "left_norm": 0.375021,
+          "top_norm": 0.446924,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 5,
+          "center_x_norm": 0.400105,
+          "center_y_norm": 0.45621,
+          "left_norm": 0.393539,
+          "top_norm": 0.446924,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        }
+      ]
+    },
+    {
+      "question": 7,
+      "options": [
+        {
+          "option": 1,
+          "center_x_norm": 0.32603,
+          "center_y_norm": 0.497164,
+          "left_norm": 0.319464,
+          "top_norm": 0.487878,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 2,
+          "center_x_norm": 0.344549,
+          "center_y_norm": 0.497164,
+          "left_norm": 0.337983,
+          "top_norm": 0.487878,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 3,
+          "center_x_norm": 0.363068,
+          "center_y_norm": 0.497164,
+          "left_norm": 0.356502,
+          "top_norm": 0.487878,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 4,
+          "center_x_norm": 0.381586,
+          "center_y_norm": 0.497164,
+          "left_norm": 0.375021,
+          "top_norm": 0.487878,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 5,
+          "center_x_norm": 0.400105,
+          "center_y_norm": 0.497164,
+          "left_norm": 0.393539,
+          "top_norm": 0.487878,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        }
+      ]
+    },
+    {
+      "question": 8,
+      "options": [
+        {
+          "option": 1,
+          "center_x_norm": 0.32603,
+          "center_y_norm": 0.538118,
+          "left_norm": 0.319464,
+          "top_norm": 0.528832,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 2,
+          "center_x_norm": 0.344549,
+          "center_y_norm": 0.538118,
+          "left_norm": 0.337983,
+          "top_norm": 0.528832,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 3,
+          "center_x_norm": 0.363068,
+          "center_y_norm": 0.538118,
+          "left_norm": 0.356502,
+          "top_norm": 0.528832,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 4,
+          "center_x_norm": 0.381586,
+          "center_y_norm": 0.538118,
+          "left_norm": 0.375021,
+          "top_norm": 0.528832,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 5,
+          "center_x_norm": 0.400105,
+          "center_y_norm": 0.538118,
+          "left_norm": 0.393539,
+          "top_norm": 0.528832,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        }
+      ]
+    },
+    {
+      "question": 9,
+      "options": [
+        {
+          "option": 1,
+          "center_x_norm": 0.32603,
+          "center_y_norm": 0.579073,
+          "left_norm": 0.319464,
+          "top_norm": 0.569786,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 2,
+          "center_x_norm": 0.344549,
+          "center_y_norm": 0.579073,
+          "left_norm": 0.337983,
+          "top_norm": 0.569786,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 3,
+          "center_x_norm": 0.363068,
+          "center_y_norm": 0.579073,
+          "left_norm": 0.356502,
+          "top_norm": 0.569786,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 4,
+          "center_x_norm": 0.381586,
+          "center_y_norm": 0.579073,
+          "left_norm": 0.375021,
+          "top_norm": 0.569786,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 5,
+          "center_x_norm": 0.400105,
+          "center_y_norm": 0.579073,
+          "left_norm": 0.393539,
+          "top_norm": 0.569786,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        }
+      ]
+    },
+    {
+      "question": 10,
+      "options": [
+        {
+          "option": 1,
+          "center_x_norm": 0.32603,
+          "center_y_norm": 0.620027,
+          "left_norm": 0.319464,
+          "top_norm": 0.610741,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 2,
+          "center_x_norm": 0.344549,
+          "center_y_norm": 0.620027,
+          "left_norm": 0.337983,
+          "top_norm": 0.610741,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 3,
+          "center_x_norm": 0.363068,
+          "center_y_norm": 0.620027,
+          "left_norm": 0.356502,
+          "top_norm": 0.610741,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 4,
+          "center_x_norm": 0.381586,
+          "center_y_norm": 0.620027,
+          "left_norm": 0.375021,
+          "top_norm": 0.610741,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 5,
+          "center_x_norm": 0.400105,
+          "center_y_norm": 0.620027,
+          "left_norm": 0.393539,
+          "top_norm": 0.610741,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        }
+      ]
+    },
+    {
+      "question": 11,
+      "options": [
+        {
+          "option": 1,
+          "center_x_norm": 0.32603,
+          "center_y_norm": 0.660981,
+          "left_norm": 0.319464,
+          "top_norm": 0.651695,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 2,
+          "center_x_norm": 0.344549,
+          "center_y_norm": 0.660981,
+          "left_norm": 0.337983,
+          "top_norm": 0.651695,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 3,
+          "center_x_norm": 0.363068,
+          "center_y_norm": 0.660981,
+          "left_norm": 0.356502,
+          "top_norm": 0.651695,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 4,
+          "center_x_norm": 0.381586,
+          "center_y_norm": 0.660981,
+          "left_norm": 0.375021,
+          "top_norm": 0.651695,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 5,
+          "center_x_norm": 0.400105,
+          "center_y_norm": 0.660981,
+          "left_norm": 0.393539,
+          "top_norm": 0.651695,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        }
+      ]
+    },
+    {
+      "question": 12,
+      "options": [
+        {
+          "option": 1,
+          "center_x_norm": 0.32603,
+          "center_y_norm": 0.701935,
+          "left_norm": 0.319464,
+          "top_norm": 0.692649,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 2,
+          "center_x_norm": 0.344549,
+          "center_y_norm": 0.701935,
+          "left_norm": 0.337983,
+          "top_norm": 0.692649,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 3,
+          "center_x_norm": 0.363068,
+          "center_y_norm": 0.701935,
+          "left_norm": 0.356502,
+          "top_norm": 0.692649,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 4,
+          "center_x_norm": 0.381586,
+          "center_y_norm": 0.701935,
+          "left_norm": 0.375021,
+          "top_norm": 0.692649,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 5,
+          "center_x_norm": 0.400105,
+          "center_y_norm": 0.701935,
+          "left_norm": 0.393539,
+          "top_norm": 0.692649,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        }
+      ]
+    },
+    {
+      "question": 13,
+      "options": [
+        {
+          "option": 1,
+          "center_x_norm": 0.32603,
+          "center_y_norm": 0.742889,
+          "left_norm": 0.319464,
+          "top_norm": 0.733603,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 2,
+          "center_x_norm": 0.344549,
+          "center_y_norm": 0.742889,
+          "left_norm": 0.337983,
+          "top_norm": 0.733603,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 3,
+          "center_x_norm": 0.363068,
+          "center_y_norm": 0.742889,
+          "left_norm": 0.356502,
+          "top_norm": 0.733603,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 4,
+          "center_x_norm": 0.381586,
+          "center_y_norm": 0.742889,
+          "left_norm": 0.375021,
+          "top_norm": 0.733603,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 5,
+          "center_x_norm": 0.400105,
+          "center_y_norm": 0.742889,
+          "left_norm": 0.393539,
+          "top_norm": 0.733603,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        }
+      ]
+    },
+    {
+      "question": 14,
+      "options": [
+        {
+          "option": 1,
+          "center_x_norm": 0.32603,
+          "center_y_norm": 0.783843,
+          "left_norm": 0.319464,
+          "top_norm": 0.774557,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 2,
+          "center_x_norm": 0.344549,
+          "center_y_norm": 0.783843,
+          "left_norm": 0.337983,
+          "top_norm": 0.774557,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 3,
+          "center_x_norm": 0.363068,
+          "center_y_norm": 0.783843,
+          "left_norm": 0.356502,
+          "top_norm": 0.774557,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 4,
+          "center_x_norm": 0.381586,
+          "center_y_norm": 0.783843,
+          "left_norm": 0.375021,
+          "top_norm": 0.774557,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 5,
+          "center_x_norm": 0.400105,
+          "center_y_norm": 0.783843,
+          "left_norm": 0.393539,
+          "top_norm": 0.774557,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        }
+      ]
+    },
+    {
+      "question": 15,
+      "options": [
+        {
+          "option": 1,
+          "center_x_norm": 0.32603,
+          "center_y_norm": 0.824797,
+          "left_norm": 0.319464,
+          "top_norm": 0.815511,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 2,
+          "center_x_norm": 0.344549,
+          "center_y_norm": 0.824797,
+          "left_norm": 0.337983,
+          "top_norm": 0.815511,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 3,
+          "center_x_norm": 0.363068,
+          "center_y_norm": 0.824797,
+          "left_norm": 0.356502,
+          "top_norm": 0.815511,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 4,
+          "center_x_norm": 0.381586,
+          "center_y_norm": 0.824797,
+          "left_norm": 0.375021,
+          "top_norm": 0.815511,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 5,
+          "center_x_norm": 0.400105,
+          "center_y_norm": 0.824797,
+          "left_norm": 0.393539,
+          "top_norm": 0.815511,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        }
+      ]
+    },
+    {
+      "question": 16,
+      "options": [
+        {
+          "option": 1,
+          "center_x_norm": 0.460811,
+          "center_y_norm": 0.251439,
+          "left_norm": 0.454245,
+          "top_norm": 0.242153,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 2,
+          "center_x_norm": 0.479329,
+          "center_y_norm": 0.251439,
+          "left_norm": 0.472764,
+          "top_norm": 0.242153,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 3,
+          "center_x_norm": 0.497848,
+          "center_y_norm": 0.251439,
+          "left_norm": 0.491282,
+          "top_norm": 0.242153,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 4,
+          "center_x_norm": 0.516367,
+          "center_y_norm": 0.251439,
+          "left_norm": 0.509801,
+          "top_norm": 0.242153,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 5,
+          "center_x_norm": 0.534886,
+          "center_y_norm": 0.251439,
+          "left_norm": 0.52832,
+          "top_norm": 0.242153,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        }
+      ]
+    },
+    {
+      "question": 17,
+      "options": [
+        {
+          "option": 1,
+          "center_x_norm": 0.460811,
+          "center_y_norm": 0.292394,
+          "left_norm": 0.454245,
+          "top_norm": 0.283107,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 2,
+          "center_x_norm": 0.479329,
+          "center_y_norm": 0.292394,
+          "left_norm": 0.472764,
+          "top_norm": 0.283107,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 3,
+          "center_x_norm": 0.497848,
+          "center_y_norm": 0.292394,
+          "left_norm": 0.491282,
+          "top_norm": 0.283107,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 4,
+          "center_x_norm": 0.516367,
+          "center_y_norm": 0.292394,
+          "left_norm": 0.509801,
+          "top_norm": 0.283107,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 5,
+          "center_x_norm": 0.534886,
+          "center_y_norm": 0.292394,
+          "left_norm": 0.52832,
+          "top_norm": 0.283107,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        }
+      ]
+    },
+    {
+      "question": 18,
+      "options": [
+        {
+          "option": 1,
+          "center_x_norm": 0.460811,
+          "center_y_norm": 0.333348,
+          "left_norm": 0.454245,
+          "top_norm": 0.324062,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 2,
+          "center_x_norm": 0.479329,
+          "center_y_norm": 0.333348,
+          "left_norm": 0.472764,
+          "top_norm": 0.324062,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 3,
+          "center_x_norm": 0.497848,
+          "center_y_norm": 0.333348,
+          "left_norm": 0.491282,
+          "top_norm": 0.324062,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 4,
+          "center_x_norm": 0.516367,
+          "center_y_norm": 0.333348,
+          "left_norm": 0.509801,
+          "top_norm": 0.324062,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 5,
+          "center_x_norm": 0.534886,
+          "center_y_norm": 0.333348,
+          "left_norm": 0.52832,
+          "top_norm": 0.324062,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        }
+      ]
+    },
+    {
+      "question": 19,
+      "options": [
+        {
+          "option": 1,
+          "center_x_norm": 0.460811,
+          "center_y_norm": 0.374302,
+          "left_norm": 0.454245,
+          "top_norm": 0.365016,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 2,
+          "center_x_norm": 0.479329,
+          "center_y_norm": 0.374302,
+          "left_norm": 0.472764,
+          "top_norm": 0.365016,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 3,
+          "center_x_norm": 0.497848,
+          "center_y_norm": 0.374302,
+          "left_norm": 0.491282,
+          "top_norm": 0.365016,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 4,
+          "center_x_norm": 0.516367,
+          "center_y_norm": 0.374302,
+          "left_norm": 0.509801,
+          "top_norm": 0.365016,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 5,
+          "center_x_norm": 0.534886,
+          "center_y_norm": 0.374302,
+          "left_norm": 0.52832,
+          "top_norm": 0.365016,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        }
+      ]
+    },
+    {
+      "question": 20,
+      "options": [
+        {
+          "option": 1,
+          "center_x_norm": 0.460811,
+          "center_y_norm": 0.415256,
+          "left_norm": 0.454245,
+          "top_norm": 0.40597,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 2,
+          "center_x_norm": 0.479329,
+          "center_y_norm": 0.415256,
+          "left_norm": 0.472764,
+          "top_norm": 0.40597,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 3,
+          "center_x_norm": 0.497848,
+          "center_y_norm": 0.415256,
+          "left_norm": 0.491282,
+          "top_norm": 0.40597,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 4,
+          "center_x_norm": 0.516367,
+          "center_y_norm": 0.415256,
+          "left_norm": 0.509801,
+          "top_norm": 0.40597,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 5,
+          "center_x_norm": 0.534886,
+          "center_y_norm": 0.415256,
+          "left_norm": 0.52832,
+          "top_norm": 0.40597,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        }
+      ]
+    },
+    {
+      "question": 21,
+      "options": [
+        {
+          "option": 1,
+          "center_x_norm": 0.460811,
+          "center_y_norm": 0.45621,
+          "left_norm": 0.454245,
+          "top_norm": 0.446924,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 2,
+          "center_x_norm": 0.479329,
+          "center_y_norm": 0.45621,
+          "left_norm": 0.472764,
+          "top_norm": 0.446924,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 3,
+          "center_x_norm": 0.497848,
+          "center_y_norm": 0.45621,
+          "left_norm": 0.491282,
+          "top_norm": 0.446924,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 4,
+          "center_x_norm": 0.516367,
+          "center_y_norm": 0.45621,
+          "left_norm": 0.509801,
+          "top_norm": 0.446924,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 5,
+          "center_x_norm": 0.534886,
+          "center_y_norm": 0.45621,
+          "left_norm": 0.52832,
+          "top_norm": 0.446924,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        }
+      ]
+    },
+    {
+      "question": 22,
+      "options": [
+        {
+          "option": 1,
+          "center_x_norm": 0.460811,
+          "center_y_norm": 0.497164,
+          "left_norm": 0.454245,
+          "top_norm": 0.487878,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 2,
+          "center_x_norm": 0.479329,
+          "center_y_norm": 0.497164,
+          "left_norm": 0.472764,
+          "top_norm": 0.487878,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 3,
+          "center_x_norm": 0.497848,
+          "center_y_norm": 0.497164,
+          "left_norm": 0.491282,
+          "top_norm": 0.487878,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 4,
+          "center_x_norm": 0.516367,
+          "center_y_norm": 0.497164,
+          "left_norm": 0.509801,
+          "top_norm": 0.487878,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 5,
+          "center_x_norm": 0.534886,
+          "center_y_norm": 0.497164,
+          "left_norm": 0.52832,
+          "top_norm": 0.487878,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        }
+      ]
+    },
+    {
+      "question": 23,
+      "options": [
+        {
+          "option": 1,
+          "center_x_norm": 0.460811,
+          "center_y_norm": 0.538118,
+          "left_norm": 0.454245,
+          "top_norm": 0.528832,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 2,
+          "center_x_norm": 0.479329,
+          "center_y_norm": 0.538118,
+          "left_norm": 0.472764,
+          "top_norm": 0.528832,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 3,
+          "center_x_norm": 0.497848,
+          "center_y_norm": 0.538118,
+          "left_norm": 0.491282,
+          "top_norm": 0.528832,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 4,
+          "center_x_norm": 0.516367,
+          "center_y_norm": 0.538118,
+          "left_norm": 0.509801,
+          "top_norm": 0.528832,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 5,
+          "center_x_norm": 0.534886,
+          "center_y_norm": 0.538118,
+          "left_norm": 0.52832,
+          "top_norm": 0.528832,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        }
+      ]
+    },
+    {
+      "question": 24,
+      "options": [
+        {
+          "option": 1,
+          "center_x_norm": 0.460811,
+          "center_y_norm": 0.579073,
+          "left_norm": 0.454245,
+          "top_norm": 0.569786,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 2,
+          "center_x_norm": 0.479329,
+          "center_y_norm": 0.579073,
+          "left_norm": 0.472764,
+          "top_norm": 0.569786,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 3,
+          "center_x_norm": 0.497848,
+          "center_y_norm": 0.579073,
+          "left_norm": 0.491282,
+          "top_norm": 0.569786,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 4,
+          "center_x_norm": 0.516367,
+          "center_y_norm": 0.579073,
+          "left_norm": 0.509801,
+          "top_norm": 0.569786,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 5,
+          "center_x_norm": 0.534886,
+          "center_y_norm": 0.579073,
+          "left_norm": 0.52832,
+          "top_norm": 0.569786,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        }
+      ]
+    },
+    {
+      "question": 25,
+      "options": [
+        {
+          "option": 1,
+          "center_x_norm": 0.460811,
+          "center_y_norm": 0.620027,
+          "left_norm": 0.454245,
+          "top_norm": 0.610741,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 2,
+          "center_x_norm": 0.479329,
+          "center_y_norm": 0.620027,
+          "left_norm": 0.472764,
+          "top_norm": 0.610741,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 3,
+          "center_x_norm": 0.497848,
+          "center_y_norm": 0.620027,
+          "left_norm": 0.491282,
+          "top_norm": 0.610741,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 4,
+          "center_x_norm": 0.516367,
+          "center_y_norm": 0.620027,
+          "left_norm": 0.509801,
+          "top_norm": 0.610741,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 5,
+          "center_x_norm": 0.534886,
+          "center_y_norm": 0.620027,
+          "left_norm": 0.52832,
+          "top_norm": 0.610741,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        }
+      ]
+    },
+    {
+      "question": 26,
+      "options": [
+        {
+          "option": 1,
+          "center_x_norm": 0.460811,
+          "center_y_norm": 0.660981,
+          "left_norm": 0.454245,
+          "top_norm": 0.651695,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 2,
+          "center_x_norm": 0.479329,
+          "center_y_norm": 0.660981,
+          "left_norm": 0.472764,
+          "top_norm": 0.651695,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 3,
+          "center_x_norm": 0.497848,
+          "center_y_norm": 0.660981,
+          "left_norm": 0.491282,
+          "top_norm": 0.651695,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 4,
+          "center_x_norm": 0.516367,
+          "center_y_norm": 0.660981,
+          "left_norm": 0.509801,
+          "top_norm": 0.651695,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 5,
+          "center_x_norm": 0.534886,
+          "center_y_norm": 0.660981,
+          "left_norm": 0.52832,
+          "top_norm": 0.651695,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        }
+      ]
+    },
+    {
+      "question": 27,
+      "options": [
+        {
+          "option": 1,
+          "center_x_norm": 0.460811,
+          "center_y_norm": 0.701935,
+          "left_norm": 0.454245,
+          "top_norm": 0.692649,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 2,
+          "center_x_norm": 0.479329,
+          "center_y_norm": 0.701935,
+          "left_norm": 0.472764,
+          "top_norm": 0.692649,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 3,
+          "center_x_norm": 0.497848,
+          "center_y_norm": 0.701935,
+          "left_norm": 0.491282,
+          "top_norm": 0.692649,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 4,
+          "center_x_norm": 0.516367,
+          "center_y_norm": 0.701935,
+          "left_norm": 0.509801,
+          "top_norm": 0.692649,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 5,
+          "center_x_norm": 0.534886,
+          "center_y_norm": 0.701935,
+          "left_norm": 0.52832,
+          "top_norm": 0.692649,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        }
+      ]
+    },
+    {
+      "question": 28,
+      "options": [
+        {
+          "option": 1,
+          "center_x_norm": 0.460811,
+          "center_y_norm": 0.742889,
+          "left_norm": 0.454245,
+          "top_norm": 0.733603,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 2,
+          "center_x_norm": 0.479329,
+          "center_y_norm": 0.742889,
+          "left_norm": 0.472764,
+          "top_norm": 0.733603,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 3,
+          "center_x_norm": 0.497848,
+          "center_y_norm": 0.742889,
+          "left_norm": 0.491282,
+          "top_norm": 0.733603,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 4,
+          "center_x_norm": 0.516367,
+          "center_y_norm": 0.742889,
+          "left_norm": 0.509801,
+          "top_norm": 0.733603,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 5,
+          "center_x_norm": 0.534886,
+          "center_y_norm": 0.742889,
+          "left_norm": 0.52832,
+          "top_norm": 0.733603,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        }
+      ]
+    },
+    {
+      "question": 29,
+      "options": [
+        {
+          "option": 1,
+          "center_x_norm": 0.460811,
+          "center_y_norm": 0.783843,
+          "left_norm": 0.454245,
+          "top_norm": 0.774557,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 2,
+          "center_x_norm": 0.479329,
+          "center_y_norm": 0.783843,
+          "left_norm": 0.472764,
+          "top_norm": 0.774557,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 3,
+          "center_x_norm": 0.497848,
+          "center_y_norm": 0.783843,
+          "left_norm": 0.491282,
+          "top_norm": 0.774557,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 4,
+          "center_x_norm": 0.516367,
+          "center_y_norm": 0.783843,
+          "left_norm": 0.509801,
+          "top_norm": 0.774557,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 5,
+          "center_x_norm": 0.534886,
+          "center_y_norm": 0.783843,
+          "left_norm": 0.52832,
+          "top_norm": 0.774557,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        }
+      ]
+    },
+    {
+      "question": 30,
+      "options": [
+        {
+          "option": 1,
+          "center_x_norm": 0.460811,
+          "center_y_norm": 0.824797,
+          "left_norm": 0.454245,
+          "top_norm": 0.815511,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 2,
+          "center_x_norm": 0.479329,
+          "center_y_norm": 0.824797,
+          "left_norm": 0.472764,
+          "top_norm": 0.815511,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 3,
+          "center_x_norm": 0.497848,
+          "center_y_norm": 0.824797,
+          "left_norm": 0.491282,
+          "top_norm": 0.815511,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 4,
+          "center_x_norm": 0.516367,
+          "center_y_norm": 0.824797,
+          "left_norm": 0.509801,
+          "top_norm": 0.815511,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 5,
+          "center_x_norm": 0.534886,
+          "center_y_norm": 0.824797,
+          "left_norm": 0.52832,
+          "top_norm": 0.815511,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        }
+      ]
+    },
+    {
+      "question": 31,
+      "options": [
+        {
+          "option": 1,
+          "center_x_norm": 0.595802,
+          "center_y_norm": 0.251439,
+          "left_norm": 0.589236,
+          "top_norm": 0.242153,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 2,
+          "center_x_norm": 0.614321,
+          "center_y_norm": 0.251439,
+          "left_norm": 0.607755,
+          "top_norm": 0.242153,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 3,
+          "center_x_norm": 0.632839,
+          "center_y_norm": 0.251439,
+          "left_norm": 0.626274,
+          "top_norm": 0.242153,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 4,
+          "center_x_norm": 0.651358,
+          "center_y_norm": 0.251439,
+          "left_norm": 0.644792,
+          "top_norm": 0.242153,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 5,
+          "center_x_norm": 0.669877,
+          "center_y_norm": 0.251439,
+          "left_norm": 0.663311,
+          "top_norm": 0.242153,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        }
+      ]
+    },
+    {
+      "question": 32,
+      "options": [
+        {
+          "option": 1,
+          "center_x_norm": 0.595802,
+          "center_y_norm": 0.292394,
+          "left_norm": 0.589236,
+          "top_norm": 0.283107,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 2,
+          "center_x_norm": 0.614321,
+          "center_y_norm": 0.292394,
+          "left_norm": 0.607755,
+          "top_norm": 0.283107,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 3,
+          "center_x_norm": 0.632839,
+          "center_y_norm": 0.292394,
+          "left_norm": 0.626274,
+          "top_norm": 0.283107,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 4,
+          "center_x_norm": 0.651358,
+          "center_y_norm": 0.292394,
+          "left_norm": 0.644792,
+          "top_norm": 0.283107,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 5,
+          "center_x_norm": 0.669877,
+          "center_y_norm": 0.292394,
+          "left_norm": 0.663311,
+          "top_norm": 0.283107,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        }
+      ]
+    },
+    {
+      "question": 33,
+      "options": [
+        {
+          "option": 1,
+          "center_x_norm": 0.595802,
+          "center_y_norm": 0.333348,
+          "left_norm": 0.589236,
+          "top_norm": 0.324062,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 2,
+          "center_x_norm": 0.614321,
+          "center_y_norm": 0.333348,
+          "left_norm": 0.607755,
+          "top_norm": 0.324062,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 3,
+          "center_x_norm": 0.632839,
+          "center_y_norm": 0.333348,
+          "left_norm": 0.626274,
+          "top_norm": 0.324062,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 4,
+          "center_x_norm": 0.651358,
+          "center_y_norm": 0.333348,
+          "left_norm": 0.644792,
+          "top_norm": 0.324062,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 5,
+          "center_x_norm": 0.669877,
+          "center_y_norm": 0.333348,
+          "left_norm": 0.663311,
+          "top_norm": 0.324062,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        }
+      ]
+    },
+    {
+      "question": 34,
+      "options": [
+        {
+          "option": 1,
+          "center_x_norm": 0.595802,
+          "center_y_norm": 0.374302,
+          "left_norm": 0.589236,
+          "top_norm": 0.365016,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 2,
+          "center_x_norm": 0.614321,
+          "center_y_norm": 0.374302,
+          "left_norm": 0.607755,
+          "top_norm": 0.365016,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 3,
+          "center_x_norm": 0.632839,
+          "center_y_norm": 0.374302,
+          "left_norm": 0.626274,
+          "top_norm": 0.365016,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 4,
+          "center_x_norm": 0.651358,
+          "center_y_norm": 0.374302,
+          "left_norm": 0.644792,
+          "top_norm": 0.365016,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 5,
+          "center_x_norm": 0.669877,
+          "center_y_norm": 0.374302,
+          "left_norm": 0.663311,
+          "top_norm": 0.365016,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        }
+      ]
+    },
+    {
+      "question": 35,
+      "options": [
+        {
+          "option": 1,
+          "center_x_norm": 0.595802,
+          "center_y_norm": 0.415256,
+          "left_norm": 0.589236,
+          "top_norm": 0.40597,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 2,
+          "center_x_norm": 0.614321,
+          "center_y_norm": 0.415256,
+          "left_norm": 0.607755,
+          "top_norm": 0.40597,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 3,
+          "center_x_norm": 0.632839,
+          "center_y_norm": 0.415256,
+          "left_norm": 0.626274,
+          "top_norm": 0.40597,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 4,
+          "center_x_norm": 0.651358,
+          "center_y_norm": 0.415256,
+          "left_norm": 0.644792,
+          "top_norm": 0.40597,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 5,
+          "center_x_norm": 0.669877,
+          "center_y_norm": 0.415256,
+          "left_norm": 0.663311,
+          "top_norm": 0.40597,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        }
+      ]
+    },
+    {
+      "question": 36,
+      "options": [
+        {
+          "option": 1,
+          "center_x_norm": 0.595802,
+          "center_y_norm": 0.45621,
+          "left_norm": 0.589236,
+          "top_norm": 0.446924,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 2,
+          "center_x_norm": 0.614321,
+          "center_y_norm": 0.45621,
+          "left_norm": 0.607755,
+          "top_norm": 0.446924,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 3,
+          "center_x_norm": 0.632839,
+          "center_y_norm": 0.45621,
+          "left_norm": 0.626274,
+          "top_norm": 0.446924,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 4,
+          "center_x_norm": 0.651358,
+          "center_y_norm": 0.45621,
+          "left_norm": 0.644792,
+          "top_norm": 0.446924,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 5,
+          "center_x_norm": 0.669877,
+          "center_y_norm": 0.45621,
+          "left_norm": 0.663311,
+          "top_norm": 0.446924,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        }
+      ]
+    },
+    {
+      "question": 37,
+      "options": [
+        {
+          "option": 1,
+          "center_x_norm": 0.595802,
+          "center_y_norm": 0.497164,
+          "left_norm": 0.589236,
+          "top_norm": 0.487878,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 2,
+          "center_x_norm": 0.614321,
+          "center_y_norm": 0.497164,
+          "left_norm": 0.607755,
+          "top_norm": 0.487878,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 3,
+          "center_x_norm": 0.632839,
+          "center_y_norm": 0.497164,
+          "left_norm": 0.626274,
+          "top_norm": 0.487878,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 4,
+          "center_x_norm": 0.651358,
+          "center_y_norm": 0.497164,
+          "left_norm": 0.644792,
+          "top_norm": 0.487878,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 5,
+          "center_x_norm": 0.669877,
+          "center_y_norm": 0.497164,
+          "left_norm": 0.663311,
+          "top_norm": 0.487878,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        }
+      ]
+    },
+    {
+      "question": 38,
+      "options": [
+        {
+          "option": 1,
+          "center_x_norm": 0.595802,
+          "center_y_norm": 0.538118,
+          "left_norm": 0.589236,
+          "top_norm": 0.528832,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 2,
+          "center_x_norm": 0.614321,
+          "center_y_norm": 0.538118,
+          "left_norm": 0.607755,
+          "top_norm": 0.528832,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 3,
+          "center_x_norm": 0.632839,
+          "center_y_norm": 0.538118,
+          "left_norm": 0.626274,
+          "top_norm": 0.528832,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 4,
+          "center_x_norm": 0.651358,
+          "center_y_norm": 0.538118,
+          "left_norm": 0.644792,
+          "top_norm": 0.528832,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 5,
+          "center_x_norm": 0.669877,
+          "center_y_norm": 0.538118,
+          "left_norm": 0.663311,
+          "top_norm": 0.528832,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        }
+      ]
+    },
+    {
+      "question": 39,
+      "options": [
+        {
+          "option": 1,
+          "center_x_norm": 0.595802,
+          "center_y_norm": 0.579073,
+          "left_norm": 0.589236,
+          "top_norm": 0.569786,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 2,
+          "center_x_norm": 0.614321,
+          "center_y_norm": 0.579073,
+          "left_norm": 0.607755,
+          "top_norm": 0.569786,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 3,
+          "center_x_norm": 0.632839,
+          "center_y_norm": 0.579073,
+          "left_norm": 0.626274,
+          "top_norm": 0.569786,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 4,
+          "center_x_norm": 0.651358,
+          "center_y_norm": 0.579073,
+          "left_norm": 0.644792,
+          "top_norm": 0.569786,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 5,
+          "center_x_norm": 0.669877,
+          "center_y_norm": 0.579073,
+          "left_norm": 0.663311,
+          "top_norm": 0.569786,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        }
+      ]
+    },
+    {
+      "question": 40,
+      "options": [
+        {
+          "option": 1,
+          "center_x_norm": 0.595802,
+          "center_y_norm": 0.619987,
+          "left_norm": 0.589236,
+          "top_norm": 0.610701,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 2,
+          "center_x_norm": 0.614321,
+          "center_y_norm": 0.619987,
+          "left_norm": 0.607755,
+          "top_norm": 0.610701,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 3,
+          "center_x_norm": 0.632839,
+          "center_y_norm": 0.619987,
+          "left_norm": 0.626274,
+          "top_norm": 0.610701,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 4,
+          "center_x_norm": 0.651358,
+          "center_y_norm": 0.619987,
+          "left_norm": 0.644793,
+          "top_norm": 0.610701,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 5,
+          "center_x_norm": 0.669877,
+          "center_y_norm": 0.619987,
+          "left_norm": 0.663311,
+          "top_norm": 0.610701,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        }
+      ]
+    },
+    {
+      "question": 41,
+      "options": [
+        {
+          "option": 1,
+          "center_x_norm": 0.595802,
+          "center_y_norm": 0.660981,
+          "left_norm": 0.589236,
+          "top_norm": 0.651695,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 2,
+          "center_x_norm": 0.614321,
+          "center_y_norm": 0.660981,
+          "left_norm": 0.607755,
+          "top_norm": 0.651695,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 3,
+          "center_x_norm": 0.632839,
+          "center_y_norm": 0.660981,
+          "left_norm": 0.626274,
+          "top_norm": 0.651695,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 4,
+          "center_x_norm": 0.651358,
+          "center_y_norm": 0.660981,
+          "left_norm": 0.644792,
+          "top_norm": 0.651695,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 5,
+          "center_x_norm": 0.669877,
+          "center_y_norm": 0.660981,
+          "left_norm": 0.663311,
+          "top_norm": 0.651695,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        }
+      ]
+    },
+    {
+      "question": 42,
+      "options": [
+        {
+          "option": 1,
+          "center_x_norm": 0.595802,
+          "center_y_norm": 0.701935,
+          "left_norm": 0.589236,
+          "top_norm": 0.692649,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 2,
+          "center_x_norm": 0.614321,
+          "center_y_norm": 0.701935,
+          "left_norm": 0.607755,
+          "top_norm": 0.692649,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 3,
+          "center_x_norm": 0.632839,
+          "center_y_norm": 0.701935,
+          "left_norm": 0.626274,
+          "top_norm": 0.692649,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 4,
+          "center_x_norm": 0.651358,
+          "center_y_norm": 0.701935,
+          "left_norm": 0.644792,
+          "top_norm": 0.692649,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 5,
+          "center_x_norm": 0.669877,
+          "center_y_norm": 0.701935,
+          "left_norm": 0.663311,
+          "top_norm": 0.692649,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        }
+      ]
+    },
+    {
+      "question": 43,
+      "options": [
+        {
+          "option": 1,
+          "center_x_norm": 0.595802,
+          "center_y_norm": 0.742889,
+          "left_norm": 0.589236,
+          "top_norm": 0.733603,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 2,
+          "center_x_norm": 0.614321,
+          "center_y_norm": 0.742889,
+          "left_norm": 0.607755,
+          "top_norm": 0.733603,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 3,
+          "center_x_norm": 0.632839,
+          "center_y_norm": 0.742889,
+          "left_norm": 0.626274,
+          "top_norm": 0.733603,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 4,
+          "center_x_norm": 0.651358,
+          "center_y_norm": 0.742889,
+          "left_norm": 0.644792,
+          "top_norm": 0.733603,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 5,
+          "center_x_norm": 0.669877,
+          "center_y_norm": 0.742889,
+          "left_norm": 0.663311,
+          "top_norm": 0.733603,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        }
+      ]
+    },
+    {
+      "question": 44,
+      "options": [
+        {
+          "option": 1,
+          "center_x_norm": 0.595802,
+          "center_y_norm": 0.783843,
+          "left_norm": 0.589236,
+          "top_norm": 0.774557,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 2,
+          "center_x_norm": 0.614321,
+          "center_y_norm": 0.783843,
+          "left_norm": 0.607755,
+          "top_norm": 0.774557,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 3,
+          "center_x_norm": 0.632839,
+          "center_y_norm": 0.783843,
+          "left_norm": 0.626274,
+          "top_norm": 0.774557,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 4,
+          "center_x_norm": 0.651358,
+          "center_y_norm": 0.783843,
+          "left_norm": 0.644792,
+          "top_norm": 0.774557,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 5,
+          "center_x_norm": 0.669877,
+          "center_y_norm": 0.783843,
+          "left_norm": 0.663311,
+          "top_norm": 0.774557,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        }
+      ]
+    },
+    {
+      "question": 45,
+      "options": [
+        {
+          "option": 1,
+          "center_x_norm": 0.595802,
+          "center_y_norm": 0.824797,
+          "left_norm": 0.589236,
+          "top_norm": 0.815511,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 2,
+          "center_x_norm": 0.614321,
+          "center_y_norm": 0.824797,
+          "left_norm": 0.607755,
+          "top_norm": 0.815511,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 3,
+          "center_x_norm": 0.632839,
+          "center_y_norm": 0.824797,
+          "left_norm": 0.626274,
+          "top_norm": 0.815511,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 4,
+          "center_x_norm": 0.651358,
+          "center_y_norm": 0.824797,
+          "left_norm": 0.644792,
+          "top_norm": 0.815511,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        },
+        {
+          "option": 5,
+          "center_x_norm": 0.669877,
+          "center_y_norm": 0.824797,
+          "left_norm": 0.663311,
+          "top_norm": 0.815511,
+          "width_norm": 0.013132,
+          "height_norm": 0.018572
+        }
+      ]
+    }
+  ],
+  "subjective_answers": [
+    {
+      "question": 1,
+      "left_norm": 0.712931,
+      "top_norm": 0.185722,
+      "width_norm": 0.256765,
+      "height_norm": 0.140958,
+      "center_x_norm": 0.841314,
+      "center_y_norm": 0.256201
+    },
+    {
+      "question": 2,
+      "left_norm": 0.712931,
+      "top_norm": 0.326681,
+      "width_norm": 0.256765,
+      "height_norm": 0.140958,
+      "center_x_norm": 0.841314,
+      "center_y_norm": 0.39716
+    },
+    {
+      "question": 3,
+      "left_norm": 0.712931,
+      "top_norm": 0.467639,
+      "width_norm": 0.256765,
+      "height_norm": 0.140958,
+      "center_x_norm": 0.841314,
+      "center_y_norm": 0.538118
+    },
+    {
+      "question": 4,
+      "left_norm": 0.712931,
+      "top_norm": 0.608598,
+      "width_norm": 0.256765,
+      "height_norm": 0.140958,
+      "center_x_norm": 0.841314,
+      "center_y_norm": 0.679077
+    },
+    {
+      "question": 5,
+      "left_norm": 0.712931,
+      "top_norm": 0.749556,
+      "width_norm": 0.256765,
+      "height_norm": 0.140958,
+      "center_x_norm": 0.841314,
+      "center_y_norm": 0.820035
+    }
+  ]
+}

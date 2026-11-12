@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Runtime data (exams, uploaded answer-sheet photos, results)
+backend/storage/
+storage/
+smoke_out/
+demo_out/
+*.jpg
+*.jpeg
+*.png
+*.heic
+*.pdf
+*.xlsx
+*.xls
+*.csv
+
+# Secrets
+.env
+.env.*
+*.pem
+*.key
+secrets*
